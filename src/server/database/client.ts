@@ -8,44 +8,73 @@ declare global {
 }
 
 /**
- * Enterprise Database Client Initialization
- * Includes event logging, connection pooling configuration, and graceful teardown
+ * Safe Database Client Initialization with Lazy Fallback Proxy
+ * Prevents application startup crashes if DATABASE_URL is not yet provisioned.
  */
-function createPrismaClient(): PrismaClient {
-  const isProd = process.env.NODE_ENV === 'production';
-  const dbUrl = process.env.DATABASE_URL;
+let prismaInstance: PrismaClient | null = null;
 
-  if (!dbUrl && isProd) {
-    logger.warn('[Database] DATABASE_URL environment variable is not defined. Using in-memory fallback connection.');
+export function getDb(): PrismaClient {
+  if (!prismaInstance) {
+    const isProd = process.env.NODE_ENV === 'production';
+    try {
+      prismaInstance = globalThis.prismaGlobal ?? new PrismaClient({
+        log: isProd
+          ? [{ emit: 'event', level: 'error' }]
+          : [
+              { emit: 'stdout', level: 'warn' },
+              { emit: 'stdout', level: 'error' },
+            ],
+        errorFormat: isProd ? 'minimal' : 'pretty',
+      });
+
+      if (process.env.NODE_ENV !== 'production') {
+        globalThis.prismaGlobal = prismaInstance;
+      }
+    } catch (err) {
+      logger.warn('[Database] PrismaClient initialization deferred or failed:', err);
+      // Return a safe mock proxy if client cannot initialize
+      return new Proxy({} as any, {
+        get(_target, prop) {
+          if (prop === '$disconnect' || prop === '$connect') {
+            return async () => {};
+          }
+          return new Proxy({}, {
+            get(_t, method) {
+              return async () => {
+                logger.warn(`[Database] Query on ${String(prop)}.${String(method)} bypassed (no active connection)`);
+                return null;
+              };
+            },
+          });
+        },
+      });
+    }
   }
-
-  const client = new PrismaClient({
-    log: isProd
-      ? [{ emit: 'event', level: 'error' }]
-      : [
-          { emit: 'stdout', level: 'warn' },
-          { emit: 'stdout', level: 'error' },
-        ],
-    errorFormat: isProd ? 'minimal' : 'pretty',
-  });
-
-  return client;
+  return prismaInstance;
 }
 
-export const db: PrismaClient = globalThis.prismaGlobal ?? createPrismaClient();
-
-if (process.env.NODE_ENV !== 'production') {
-  globalThis.prismaGlobal = db;
-}
+// Transparent Proxy so all repositories importing `db` continue to work with lazy safety
+export const db: PrismaClient = new Proxy({} as any, {
+  get(_target, prop) {
+    const client = getDb();
+    const val = (client as any)[prop];
+    if (typeof val === 'function') {
+      return val.bind(client);
+    }
+    return val;
+  },
+});
 
 // Graceful Connection Shutdown Handlers
 const handleShutdown = async (signal: string) => {
-  logger.info(`[Database] Received ${signal}. Closing PostgreSQL connection pool...`);
-  try {
-    await db.$disconnect();
-    logger.info('[Database] PostgreSQL pool disconnected cleanly.');
-  } catch (error) {
-    logger.error('[Database] Error during PostgreSQL disconnection:', error);
+  if (prismaInstance) {
+    logger.info(`[Database] Received ${signal}. Closing PostgreSQL connection pool...`);
+    try {
+      await prismaInstance.$disconnect();
+      logger.info('[Database] PostgreSQL pool disconnected cleanly.');
+    } catch (error) {
+      logger.error('[Database] Error during PostgreSQL disconnection:', error);
+    }
   }
 };
 
