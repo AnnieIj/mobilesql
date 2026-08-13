@@ -8,10 +8,28 @@ interface RequestLog {
 
 const requestMap = new Map<string, RequestLog>();
 
-export const rateLimiter = (maxRequests: number = 200, windowMs: number = 60000) => {
+// Periodic memory cleanup of expired IP keys to prevent memory leak in long-lived container
+const CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
+let lastCleanup = Date.now();
+
+function purgeExpiredRecords(now: number) {
+  if (now - lastCleanup > CLEANUP_INTERVAL_MS) {
+    lastCleanup = now;
+    for (const [ip, log] of requestMap.entries()) {
+      if (now > log.resetTime) {
+        requestMap.delete(ip);
+      }
+    }
+  }
+}
+
+export const rateLimiter = (maxRequests: number = 300, windowMs: number = 60000) => {
   return (req: Request, res: Response, next: NextFunction) => {
-    const ip = req.ip || req.headers['x-forwarded-for']?.toString() || '127.0.0.1';
+    const rawIp = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || req.ip || '127.0.0.1';
+    const ip = Array.isArray(rawIp) ? rawIp[0] : rawIp.split(',')[0].trim();
     const now = Date.now();
+
+    purgeExpiredRecords(now);
 
     const record = requestMap.get(ip);
 
@@ -29,6 +47,7 @@ export const rateLimiter = (maxRequests: number = 200, windowMs: number = 60000)
     record.count += 1;
 
     if (record.count > maxRequests) {
+      res.setHeader('Retry-After', Math.ceil((record.resetTime - now) / 1000));
       return ApiResponseBuilder.error(res, 'Rate limit exceeded. Please try again later.', 429);
     }
 
