@@ -12,16 +12,16 @@ describe('UI Store State Transitions', () => {
 
   it('manages modal and drawer states', () => {
     useUIStore.getState().setCopilotOpen(true);
-    expect(useUIStore.getState().copilotOpen).toBe(true);
+    expect(useUIStore.getState().isCopilotOpen).toBe(true);
 
     useUIStore.getState().setSearchOpen(true);
-    expect(useUIStore.getState().searchOpen).toBe(true);
+    expect(useUIStore.getState().isSearchOpen).toBe(true);
   });
 
   it('pushes and auto-dismisses toast notifications', () => {
     useUIStore.getState().addToast({
       title: 'Query Executed',
-      description: '14 rows returned in 12ms',
+      message: '14 rows returned in 12ms',
       type: 'success',
     });
 
