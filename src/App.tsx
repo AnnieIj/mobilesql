@@ -17,6 +17,9 @@ import { LeaderboardView } from './components/leaderboard/LeaderboardView';
 import { CommunityView } from './components/community/CommunityView';
 import { SettingsView } from './components/settings/SettingsView';
 import { HelpView } from './components/help/HelpView';
+import { LandingPageView } from './components/landing/LandingPageView';
+import { DocsHubView } from './components/docs/DocsHubView';
+import { AdminDashboardView } from './components/admin/AdminDashboardView';
 import { DatasetBuilderView } from './components/dataset/DatasetBuilderView';
 import {
   PageNotFound404,
@@ -99,6 +102,18 @@ function ActiveTabContent() {
 
   if (activeTab === 'help') {
     return <HelpView />;
+  }
+
+  if (activeTab === 'landing') {
+    return <LandingPageView />;
+  }
+
+  if (activeTab === 'docs') {
+    return <DocsHubView />;
+  }
+
+  if (activeTab === 'admin') {
+    return <AdminDashboardView />;
   }
 
   if (activeTab === 'error-404') {

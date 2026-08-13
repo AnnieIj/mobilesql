@@ -7,6 +7,8 @@ import { errorHandler } from './src/server/middlewares/errorHandler';
 import { securityHeaders } from './src/server/middlewares/security';
 import { rateLimiter } from './src/server/middlewares/rateLimiter';
 import { logger } from './src/server/utils/logger';
+import { printStartupBanner } from './src/server/utils/envValidator';
+import { telemetry } from './src/server/utils/monitoring';
 
 const currentDirname = process.cwd();
 
@@ -32,13 +34,15 @@ async function startServer() {
   // 2. Mount Versioned REST API Routes (/api/v1)
   app.use('/api/v1', apiRouter);
 
-  // Legacy health check alias
+  // Production health check & telemetry probe
   app.get('/api/health', (_req, res) => {
+    const diagnostics = telemetry.getSystemDiagnostics();
     res.json({
       status: 'ok',
       service: 'MobileSQL Express Backend',
       version: '1.0.0-prod',
       timestamp: new Date().toISOString(),
+      diagnostics,
     });
   });
 
@@ -146,7 +150,7 @@ Format response in JSON with:
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    logger.info(`[MobileSQL Backend] Server running on http://0.0.0.0:${PORT}`);
+    printStartupBanner(PORT);
   });
 }
 

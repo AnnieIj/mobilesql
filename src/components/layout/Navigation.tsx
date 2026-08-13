@@ -24,6 +24,8 @@ import {
   Menu,
   X,
   Layers,
+  Globe,
+  ShieldAlert,
 } from 'lucide-react';
 import { cn } from '../../lib/cn';
 import { useAuthStore } from '../../stores/useAuthStore';
@@ -48,7 +50,7 @@ export const Navbar: React.FC = () => {
     setCurrentDialect,
   } = useUIStore();
 
-  const { user } = useAuthStore();
+  const { user, isDemoMode, loadDemoPersona, resetToDefaultGuest } = useAuthStore();
   const [isDialectMenuOpen, setIsDialectMenuOpen] = useState(false);
   const unreadNotifications = notifications.filter((n) => !n.read).length;
 
@@ -136,6 +138,27 @@ export const Navbar: React.FC = () => {
           aria-label="Open Global Search"
         >
           <Search className="w-4 h-4" />
+        </button>
+
+        {/* Demo Mode Trigger / Indicator */}
+        <button
+          onClick={() => {
+            if (isDemoMode) {
+              resetToDefaultGuest();
+            } else {
+              loadDemoPersona();
+            }
+          }}
+          className={cn(
+            'hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono font-bold transition-all border cursor-pointer',
+            isDemoMode
+              ? 'bg-[#A855F7]/15 border-[#A855F7]/40 text-[#A855F7] hover:bg-[#A855F7]/25'
+              : 'bg-[#1B1B1E] border-[#2D2D31] text-[#8A8A90] hover:text-[#FFFFFF] hover:border-[#62DF7D]/50'
+          )}
+          title={isDemoMode ? 'Click to reset to Guest Mode' : 'Click to load Demo Pro Architect Persona'}
+        >
+          <Zap className="w-3.5 h-3.5 text-[#F59E0B]" />
+          <span>{isDemoMode ? 'Demo Persona Active' : 'Try Demo Mode'}</span>
         </button>
 
         {/* Daily Streak Pill */}
@@ -239,10 +262,13 @@ const SIDEBAR_ITEMS: SidebarMenuItem[] = [
   { id: 'career', label: 'Career Center', icon: Compass, group: 'Career' },
   { id: 'community', label: 'Community', icon: Users, group: 'Career' },
 
-  // System
+  // System & Public
+  { id: 'landing', label: 'Explore Landing', icon: Globe, group: 'System' },
+  { id: 'docs', label: 'Docs & Guides', icon: BookOpen, badge: 'v1.0', group: 'System' },
+  { id: 'admin', label: 'Admin Console', icon: ShieldAlert, badge: 'Internal', group: 'System' },
   { id: 'copilot', label: 'AI Copilot', icon: Sparkles, badge: 'Gemini', group: 'System' },
   { id: 'settings', label: 'Settings', icon: Settings, group: 'System' },
-  { id: 'help', label: 'Help & Docs', icon: HelpCircle, group: 'System' },
+  { id: 'help', label: 'Help & Shortcuts', icon: HelpCircle, group: 'System' },
 ];
 
 export const Sidebar: React.FC = () => {

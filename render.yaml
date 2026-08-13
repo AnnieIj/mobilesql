@@ -1,0 +1,31 @@
+# Render Blueprint Specification for MobileSQL
+services:
+  - type: web
+    name: mobilesql-app
+    runtime: node
+    plan: starter
+    region: oregon
+    buildCommand: npm ci && npx prisma generate && npm run build
+    startCommand: node dist/server.cjs
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: DATABASE_URL
+        fromDatabase:
+          name: mobilesql-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: GEMINI_API_KEY
+        sync: false
+
+databases:
+  - name: mobilesql-db
+    plan: starter
+    databaseName: mobilesql
+    user: postgres
+    region: oregon

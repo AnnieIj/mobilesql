@@ -1,11 +1,15 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { UserProfile } from '../types';
+import { DEMO_PRO_ARCHITECT } from '../data/demoPersona';
 
 interface AuthState {
   user: UserProfile;
   isAuthenticated: boolean;
+  isDemoMode: boolean;
   setUser: (user: UserProfile) => void;
+  loadDemoPersona: () => void;
+  resetToDefaultGuest: () => void;
   addXp: (amount: number) => void;
   incrementQueriesRun: () => void;
   incrementStreak: () => void;
@@ -34,8 +38,23 @@ export const useAuthStore = create<AuthState>()(
     (set) => ({
       user: DEFAULT_GUEST_USER,
       isAuthenticated: true,
+      isDemoMode: false,
 
-      setUser: (user) => set({ user, isAuthenticated: true }),
+      setUser: (user) => set({ user, isAuthenticated: true, isDemoMode: false }),
+
+      loadDemoPersona: () =>
+        set({
+          user: DEMO_PRO_ARCHITECT,
+          isAuthenticated: true,
+          isDemoMode: true,
+        }),
+
+      resetToDefaultGuest: () =>
+        set({
+          user: DEFAULT_GUEST_USER,
+          isAuthenticated: true,
+          isDemoMode: false,
+        }),
 
       addXp: (amount) =>
         set((state) => {
@@ -74,10 +93,11 @@ export const useAuthStore = create<AuthState>()(
           },
         })),
 
-      logout: () => set({ user: DEFAULT_GUEST_USER, isAuthenticated: false }),
+      logout: () => set({ user: DEFAULT_GUEST_USER, isAuthenticated: false, isDemoMode: false }),
     }),
     {
       name: 'mobilesql-auth-store',
     }
   )
 );
+

@@ -7,8 +7,11 @@
 [![Prisma ORM](https://img.shields.io/badge/Prisma-7.9-2D3748.svg)](https://www.prisma.io/)
 [![Tailwind CSS v4](https://img.shields.io/badge/Tailwind_CSS-v4.1-38B2AC.svg)](https://tailwindcss.com/)
 [![Docker Ready](https://img.shields.io/badge/Docker-Ready-2496ED.svg)](https://www.docker.com/)
+[![Good First Issues](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/mobilesql/mobilesql/issues)
 
 > **MobileSQL** is an enterprise-grade, mobile-first SQL learning academy and real-time database workspace powered by Google Gemini AI. Learn complex querying, practice interactive challenges, design relational schemas, and profile SQL execution plans anywhere on any device.
+
+🌐 **Live Demo**: [https://mobilesql.io](https://mobilesql.io) • 📖 **Docs**: [https://mobilesql.io/docs](https://mobilesql.io/docs)
 
 ---
 
@@ -57,7 +60,7 @@
 ```bash
 git clone https://github.com/mobilesql/mobilesql.git
 cd mobilesql
-npm install
+npm ci
 ```
 
 ### 2. Environment Setup
