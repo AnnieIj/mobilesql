@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import { SQL_CHALLENGES } from '../data/challengesData';
 import type { SQLChallenge } from '../data/challengesData';
 import { executePlaygroundQuery } from '../services/sqlExecutionEngine';
+import { apiClient } from '../services/apiClient';
 
 export interface TestCaseResult {
   testCaseId: string;
@@ -24,6 +25,7 @@ interface ChallengeState {
   isExecuting: boolean;
   testResults: TestCaseResult[];
   allPassed: boolean;
+  submissionFeedback: string | null;
 
   // User Stats & Persistence
   solvedChallengeIds: string[];
@@ -37,7 +39,7 @@ interface ChallengeState {
   setSelectedDifficulty: (diff: string) => void;
   setSelectedCompany: (company: string) => void;
   updateCode: (code: string) => void;
-  
+
   runChallengeCode: (challenge: SQLChallenge) => Promise<void>;
   resetChallenge: (challenge: SQLChallenge) => void;
 }
@@ -55,6 +57,7 @@ export const useChallengeStore = create<ChallengeState>()(
       isExecuting: false,
       testResults: [],
       allPassed: false,
+      submissionFeedback: null,
 
       solvedChallengeIds: [],
       totalPoints: 270,
@@ -67,6 +70,7 @@ export const useChallengeStore = create<ChallengeState>()(
           activeCode: challenge ? challenge.initialSql : '',
           testResults: [],
           allPassed: false,
+          submissionFeedback: null,
         });
       },
 
@@ -78,11 +82,51 @@ export const useChallengeStore = create<ChallengeState>()(
       updateCode: (code) => set({ activeCode: code }),
 
       runChallengeCode: async (challenge) => {
-        set({ isExecuting: true });
+        set({ isExecuting: true, submissionFeedback: null });
         const { activeCode } = get();
+        const codeToRun = activeCode || challenge.initialSql;
 
+        // 1. Attempt server-side challenge evaluation
+        try {
+          const res = await apiClient.challenges.submitAttempt(challenge.id, {
+            query: codeToRun,
+            dialect: 'PostgreSQL',
+          });
+
+          if (res) {
+            const mappedTestResults: TestCaseResult[] = (res.testResults || []).map((tr: any) => ({
+              testCaseId: tr.testCaseId,
+              name: tr.description || 'Test Assertion',
+              passed: tr.passed,
+              message: tr.diffMessage || (tr.passed ? 'Test assertion passed.' : 'Result mismatch.'),
+            }));
+
+            set({
+              isExecuting: false,
+              testResults: mappedTestResults,
+              allPassed: res.passed,
+              submissionFeedback: res.feedback,
+              streakDays: res.streakDays || get().streakDays,
+            });
+
+            if (res.passed) {
+              const { solvedChallengeIds, totalPoints } = get();
+              if (!solvedChallengeIds.includes(challenge.id)) {
+                set({
+                  solvedChallengeIds: [...solvedChallengeIds, challenge.id],
+                  totalPoints: totalPoints + (res.xpAwarded || challenge.pointsReward),
+                });
+              }
+            }
+            return;
+          }
+        } catch {
+          // Fallback to local sandbox engine
+        }
+
+        // 2. Client-side evaluation fallback
         const { result } = await executePlaygroundQuery(
-          activeCode || challenge.initialSql,
+          codeToRun,
           challenge.databaseId,
           'PostgreSQL'
         );
@@ -98,7 +142,6 @@ export const useChallengeStore = create<ChallengeState>()(
             message: `Syntax Error: ${result.error}`,
           });
         } else {
-          // Check test cases
           const hasRows = result.rowCount > 0;
           testResults.push({
             testCaseId: 'tc_rows',
@@ -106,7 +149,6 @@ export const useChallengeStore = create<ChallengeState>()(
             passed: hasRows,
             message: hasRows ? `Returned ${result.rowCount} rows.` : 'Query returned 0 rows.',
           });
-
           passedAll = hasRows && !result.error;
         }
 
@@ -114,6 +156,7 @@ export const useChallengeStore = create<ChallengeState>()(
           isExecuting: false,
           testResults,
           allPassed: passedAll,
+          submissionFeedback: passedAll ? 'Challenge completed successfully!' : 'Check your query syntax and constraints.',
         });
 
         if (passedAll) {
@@ -132,6 +175,7 @@ export const useChallengeStore = create<ChallengeState>()(
           activeCode: challenge.initialSql,
           testResults: [],
           allPassed: false,
+          submissionFeedback: null,
         });
       },
     }),

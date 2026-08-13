@@ -1,9 +1,11 @@
 import type { SQLExecutionResult, SQLDialect } from '../types';
 import { PRACTICE_DATABASES } from '../data/playgroundDatabases';
+import { apiClient } from './apiClient';
+import { logger } from '../server/utils/logger';
 
 export interface ExecutionPlanNode {
   id: string;
-  type: string; // e.g. 'Seq Scan', 'Index Scan', 'Hash Join', 'Sort', 'Aggregate'
+  type: string;
   relationName?: string;
   costStart: number;
   costEnd: number;
@@ -19,14 +21,9 @@ export const executePlaygroundQuery = async (
   dialect: SQLDialect
 ): Promise<{ result: SQLExecutionResult; plan?: ExecutionPlanNode }> => {
   const startTime = performance.now();
-  
-  // Find database dataset
-  const db = PRACTICE_DATABASES.find((d) => d.id === databaseId) || PRACTICE_DATABASES[0];
-
   const trimmed = sql.trim();
   const upperSql = trimmed.toUpperCase();
 
-  // Basic validation check
   if (!trimmed) {
     return {
       result: {
@@ -42,13 +39,63 @@ export const executePlaygroundQuery = async (
     };
   }
 
-  // Check for EXPLAIN / EXPLAIN ANALYZE
-  const isExplain = upperSql.startsWith('EXPLAIN');
+  // 1. Attempt real execution via PostgreSQL backend API
+  try {
+    const backendResult = await apiClient.sql.execute({
+      query: trimmed,
+      dialect: dialect as any,
+      timeoutMs: 8000,
+      readOnly: false,
+      limit: 1000,
+    });
 
-  // Simulate parsing delay for realistic execution feeling
-  await new Promise((resolve) => setTimeout(resolve, Math.floor(Math.random() * 8) + 4));
+    if (backendResult && backendResult.status === 'success') {
+      const execTime = backendResult.executionTimeMs || Math.round(performance.now() - startTime);
+      const colNames = backendResult.columns && backendResult.columns.length > 0
+        ? backendResult.columns.map((c: any) => c.name)
+        : Object.keys(backendResult.rows[0] || {});
 
-  // Determine target table from query
+      return {
+        result: {
+          query: trimmed,
+          columns: colNames.length > 0 ? colNames : ['status'],
+          rows: backendResult.rows || [],
+          rowCount: backendResult.rowCount || (backendResult.rows ? backendResult.rows.length : 0),
+          executionTimeMs: execTime,
+          executedAt: new Date().toISOString(),
+          dialect,
+        },
+        plan: {
+          id: 'plan_node_1',
+          type: 'Index Scan / Hash Aggregate',
+          relationName: 'postgresql_prod',
+          costStart: 0.0,
+          costEnd: 18.5,
+          actualTimeMs: Math.max(0.1, execTime * 0.4),
+          rowsProcessed: backendResult.rowCount || 1,
+        },
+      };
+    } else if (backendResult && backendResult.status === 'error') {
+      return {
+        result: {
+          query: trimmed,
+          columns: [],
+          rows: [],
+          rowCount: 0,
+          executionTimeMs: Math.round(performance.now() - startTime),
+          error: backendResult.errorMessage || 'Query execution failed on database',
+          executedAt: new Date().toISOString(),
+          dialect,
+        },
+      };
+    }
+  } catch (backendError) {
+    logger.warn('[SQLEngine] Real backend execution exception, evaluating dataset sandbox:', backendError);
+  }
+
+  // 2. Client-side Sandbox fallback for local practice datasets
+  const db = PRACTICE_DATABASES.find((d) => d.id === databaseId) || PRACTICE_DATABASES[0];
+
   let matchedTableName = '';
   for (const table of db.tables) {
     if (upperSql.includes(table.name.toUpperCase())) {
@@ -58,12 +105,10 @@ export const executePlaygroundQuery = async (
   }
 
   if (!matchedTableName && db.tables.length > 0) {
-    matchedTableName = db.tables[0].name; // default fallback
+    matchedTableName = db.tables[0].name;
   }
 
   const rawRows = db.data[matchedTableName] || [];
-  
-  // Derive columns
   let columns: string[] = [];
   if (rawRows.length > 0) {
     columns = Object.keys(rawRows[0]);
@@ -73,93 +118,83 @@ export const executePlaygroundQuery = async (
     columns = ['result'];
   }
 
-  // Handle Aggregate / Group By queries
   let rows = [...rawRows];
   if (upperSql.includes('COUNT') || upperSql.includes('SUM') || upperSql.includes('AVG')) {
     if (upperSql.includes('GROUP BY')) {
-      // Return aggregated rows preview
       rows = rows.slice(0, 5);
     } else {
-      // Single aggregate result
       columns = ['total_count', 'total_sum', 'avg_val'];
-      rows = [
-        {
-          total_count: rawRows.length,
-          total_sum: 45800.50,
-          avg_val: 1250.25,
-        },
-      ];
+      rows = [{ total_count: rawRows.length, total_sum: 45800.5, avg_val: 1250.25 }];
     }
   }
 
-  // Handle LIMIT clause if specified
   const limitMatch = trimmed.match(/LIMIT\s+(\d+)/i);
   if (limitMatch && limitMatch[1]) {
     const limitNum = parseInt(limitMatch[1], 10);
     rows = rows.slice(0, limitNum);
   }
 
-  const executionTimeMs = Math.round((performance.now() - startTime) * 10) / 10;
-
-  // Build Execution Plan Node if EXPLAIN is requested or for visual tab
-  const plan: ExecutionPlanNode = {
-    id: 'node_root',
-    type: upperSql.includes('ORDER BY') ? 'Sort' : upperSql.includes('JOIN') ? 'Hash Join' : 'Seq Scan',
-    relationName: matchedTableName,
-    costStart: 0.0,
-    costEnd: upperSql.includes('JOIN') ? 142.50 : 28.15,
-    actualTimeMs: Math.round(executionTimeMs * 0.8 * 10) / 10,
-    rowsProcessed: rows.length,
-    filter: upperSql.includes('WHERE') ? "status = 'completed'" : undefined,
-    children: upperSql.includes('JOIN')
-      ? [
-          {
-            id: 'node_child_1',
-            type: 'Index Scan',
-            relationName: `${matchedTableName}_pkey`,
-            costStart: 0.15,
-            costEnd: 8.2,
-            actualTimeMs: 1.2,
-            rowsProcessed: rows.length,
-          },
-          {
-            id: 'node_child_2',
-            type: 'Seq Scan',
-            relationName: 'customers',
-            costStart: 0.0,
-            costEnd: 18.5,
-            actualTimeMs: 2.4,
-            rowsProcessed: 1250,
-          },
-        ]
-      : undefined,
-  };
+  const executionTimeMs = Math.max(1, Math.round(performance.now() - startTime));
 
   return {
     result: {
-      query: sql,
+      query: trimmed,
       columns,
       rows,
       rowCount: rows.length,
-      executionTimeMs: Math.max(1.2, executionTimeMs),
-      executedAt: new Date().toLocaleTimeString(),
+      executionTimeMs,
+      executedAt: new Date().toISOString(),
       dialect,
     },
-    plan,
+    plan: {
+      id: 'plan_node_client',
+      type: upperSql.includes('WHERE') ? 'Index Scan' : 'Seq Scan',
+      relationName: matchedTableName || 'dataset_table',
+      costStart: 0.0,
+      costEnd: 24.8,
+      actualTimeMs: executionTimeMs * 0.5,
+      rowsProcessed: rows.length,
+    },
   };
 };
 
-export const exportToCSV = (columns: string[], rows: Record<string, unknown>[]) => {
+export const formatSQLQuery = async (query: string, dialect: SQLDialect = 'PostgreSQL'): Promise<string> => {
+  try {
+    const res = await apiClient.sql.format({
+      query,
+      dialect: dialect as any,
+      uppercaseKeywords: true,
+      tabWidth: 2,
+    });
+    if (res && res.formattedSql) return res.formattedSql;
+  } catch {
+    // fallback
+  }
+
+  const keywords = ['SELECT', 'FROM', 'WHERE', 'AND', 'OR', 'JOIN', 'LEFT JOIN', 'GROUP BY', 'ORDER BY', 'LIMIT'];
+  let formatted = query.trim();
+  keywords.forEach((kw) => {
+    const reg = new RegExp(`\\b${kw}\\b`, 'gi');
+    formatted = formatted.replace(reg, kw);
+  });
+  return formatted;
+};
+
+export const exportToCSV = (columns: string[], rows: Record<string, any>[]): string => {
   if (!columns.length || !rows.length) return '';
   const header = columns.join(',');
-  const csvRows = rows.map((r) =>
+  const rowData = rows.map((r) =>
     columns
       .map((col) => {
         const val = r[col];
-        const strVal = typeof val === 'object' ? JSON.stringify(val) : String(val ?? '');
-        return `"${strVal.replace(/"/g, '""')}"`;
+        if (val === null || val === undefined) return '';
+        if (typeof val === 'string' && (val.includes(',') || val.includes('"') || val.includes('\n'))) {
+          return `"${val.replace(/"/g, '""')}"`;
+        }
+        return String(val);
       })
       .join(',')
   );
-  return [header, ...csvRows].join('\n');
+
+  return [header, ...rowData].join('\n');
 };

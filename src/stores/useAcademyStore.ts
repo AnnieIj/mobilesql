@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { apiClient } from '../services/apiClient';
 
 export interface LessonProgress {
   lessonId: string;
@@ -45,10 +46,10 @@ interface AcademyState {
   setSearchQuery: (query: string) => void;
   setActiveLessonId: (lessonId: string | null, initialCode?: string) => void;
   toggleBookmarkLesson: (lessonId: string) => void;
-  
+
   updateLessonCode: (code: string) => void;
-  markLessonComplete: (lessonId: string, xpReward: number) => void;
-  
+  markLessonComplete: (lessonId: string, xpReward: number) => Promise<void>;
+
   submitQuizAnswer: (answerId: string, isCorrect: boolean) => void;
   resetQuizState: () => void;
 
@@ -88,7 +89,7 @@ export const useAcademyStore = create<AcademyState>()(
       isAiThinking: false,
 
       setSelectedTrackId: (trackId) => set({ selectedTrackId: trackId }),
-      
+
       setSearchQuery: (query) => set({ searchQuery: query }),
 
       setActiveLessonId: (lessonId, initialCode = '') =>
@@ -113,8 +114,16 @@ export const useAcademyStore = create<AcademyState>()(
 
       updateLessonCode: (code) => set({ activeLessonCode: code }),
 
-      markLessonComplete: (lessonId, xpReward) => {
-        const { completedLessonIds, totalXp, lessonProgressMap } = get();
+      markLessonComplete: async (lessonId, xpReward) => {
+        const { completedLessonIds, totalXp, lessonProgressMap, activeLessonCode } = get();
+
+        // 1. Sync completion with backend
+        try {
+          await apiClient.academy.completeLesson(lessonId, activeLessonCode);
+        } catch {
+          // Continue with optimistic client state
+        }
+
         if (!completedLessonIds.includes(lessonId)) {
           set({
             completedLessonIds: [...completedLessonIds, lessonId],
@@ -134,13 +143,15 @@ export const useAcademyStore = create<AcademyState>()(
       },
 
       submitQuizAnswer: (answerId, isCorrect) => {
+        const { activeLessonId } = get();
         set({
           activeQuizAnswer: answerId,
           quizSubmitted: true,
           quizIsCorrect: isCorrect,
         });
-        if (isCorrect) {
-          set((state) => ({ totalXp: state.totalXp + 20 }));
+
+        if (isCorrect && activeLessonId) {
+          get().markLessonComplete(activeLessonId, 50);
         }
       },
 
@@ -152,8 +163,6 @@ export const useAcademyStore = create<AcademyState>()(
         }),
 
       sendAiChatMessage: async (userMessageText) => {
-        if (!userMessageText.trim()) return;
-
         const userMsg: AiChatMessage = {
           id: `usr_${Date.now()}`,
           sender: 'user',
@@ -167,43 +176,35 @@ export const useAcademyStore = create<AcademyState>()(
         }));
 
         try {
-          const res = await fetch('/api/ai/copilot', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              prompt: userMessageText,
-              contextSql: get().activeLessonCode,
-            }),
+          // Request explanation from AI service
+          const aiResponse = await apiClient.post<{ explanation: string }>('/copilot/explain', {
+            query: userMessageText,
+            dialect: 'PostgreSQL',
           });
 
-          if (res.ok) {
-            const data = await res.json();
-            const aiMsg: AiChatMessage = {
-              id: `ai_${Date.now()}`,
-              sender: 'assistant',
-              text: data.response || 'Here is an explanation of the concept based on your query.',
-              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            };
-            set((state) => ({
-              aiChatMessages: [...state.aiChatMessages, aiMsg],
-              isAiThinking: false,
-            }));
-          } else {
-            throw new Error('API request failed');
-          }
-        } catch {
-          // Fallback response if offline or mock
-          const fallbackMsg: AiChatMessage = {
+          const replyText = aiResponse?.explanation || 'Here is the breakdown of the SQL concept you asked about.';
+
+          const aiReply: AiChatMessage = {
             id: `ai_${Date.now()}`,
             sender: 'assistant',
-            text: `In SQL, this statement operates on the selected database table. Keep in mind:
-1. Double-check your column names in the schema panel.
-2. Verify table aliases when using JOINs.
-3. Use WHERE before GROUP BY for row-level filtering!`,
+            text: replyText,
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           };
+
           set((state) => ({
-            aiChatMessages: [...state.aiChatMessages, fallbackMsg],
+            aiChatMessages: [...state.aiChatMessages, aiReply],
+            isAiThinking: false,
+          }));
+        } catch {
+          const fallbackReply: AiChatMessage = {
+            id: `ai_${Date.now()}`,
+            sender: 'assistant',
+            text: 'Great question! In SQL, statements are logically processed starting from FROM -> WHERE -> GROUP BY -> HAVING -> SELECT -> ORDER BY -> LIMIT.',
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          };
+
+          set((state) => ({
+            aiChatMessages: [...state.aiChatMessages, fallbackReply],
             isAiThinking: false,
           }));
         }
@@ -215,7 +216,7 @@ export const useAcademyStore = create<AcademyState>()(
             {
               id: 'msg_welcome',
               sender: 'assistant',
-              text: 'Conversation cleared. How else can I assist with this SQL lesson?',
+              text: 'AI Mentor Chat reset. Ask any SQL or schema modeling question to get started!',
               timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             },
           ],
@@ -227,9 +228,10 @@ export const useAcademyStore = create<AcademyState>()(
       name: 'mobilesql_academy_store',
       partialize: (state) => ({
         completedLessonIds: state.completedLessonIds,
-        bookmarkedLessonIds: state.bookmarkedLessonIds,
+        lessonProgressMap: state.lessonProgressMap,
         totalXp: state.totalXp,
         streakDays: state.streakDays,
+        bookmarkedLessonIds: state.bookmarkedLessonIds,
         unlockedCertificates: state.unlockedCertificates,
       }),
     }
