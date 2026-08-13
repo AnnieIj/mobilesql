@@ -1,0 +1,942 @@
+// MobileSQL Enterprise PostgreSQL Database Schema
+// Provider: PostgreSQL | ORM: Prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ==========================================
+// ENUMS
+// ==========================================
+
+enum UserRole {
+  STUDENT
+  ENGINEER
+  ARCHITECT
+  ADMIN
+}
+
+enum ThemePreference {
+  DARK
+  LIGHT
+  CYBER
+}
+
+enum SqlDialect {
+  POSTGRESQL
+  MYSQL
+  SQLITE
+  SQL_SERVER
+  ORACLE
+  SNOWFLAKE
+  BIGQUERY
+}
+
+enum ChallengeDifficulty {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+  GURU
+}
+
+enum TrackDifficulty {
+  FUNDAMENTALS
+  INTERMEDIATE
+  ADVANCED
+  EXPERT
+}
+
+enum OAuthProvider {
+  GOOGLE
+  GITHUB
+  MICROSOFT
+}
+
+enum NotificationType {
+  INFO
+  SUCCESS
+  WARNING
+  ACHIEVEMENT
+  ALERT
+  COMMUNITY_LIKE
+  COMMUNITY_COMMENT
+}
+
+enum WidgetType {
+  KPI_CARD
+  BAR_CHART
+  LINE_CHART
+  PIE_CHART
+  DATA_TABLE
+  HEATMAP
+  SINGLE_STAT
+}
+
+enum JobRoleType {
+  DATA_ENGINEER
+  DATABASE_ADMINISTRATOR
+  FULL_STACK_ENGINEER
+  BACKEND_DEVELOPER
+  DATA_ANALYST
+  ANALYTICS_ENGINEER
+}
+
+enum PostCategory {
+  QUERY_HELP
+  OPTIMIZATION_TIP
+  SHOWCASE
+  CAREER_ADVICE
+  BUG_REPORT
+  GENERAL
+}
+
+enum SubscriptionStatus {
+  INACTIVE
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  TRIALING
+}
+
+enum BillingInterval {
+  MONTHLY
+  YEARLY
+}
+
+// ==========================================
+// CORE & AUTHENTICATION TABLES
+// ==========================================
+
+model User {
+  id                   String            @id @default(uuid())
+  email                String            @unique
+  username             String            @unique
+  name                 String
+  passwordHash         String
+  role                 UserRole          @default(STUDENT)
+  isEmailVerified      Boolean           @default(false)
+  avatarUrl            String?
+  bio                  String?
+  title                String?
+  xp                   Int               @default(100)
+  level                Int               @default(1)
+  streakDays           Int               @default(1)
+  lastActiveDate       DateTime          @default(now())
+  failedLoginAttempts  Int               @default(0)
+  lockoutUntil         DateTime?
+  githubHandle         String?
+  linkedinHandle       String?
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+
+  // Relationships
+  profile              Profile?
+  settings             UserSetting?
+  sessions             Session[]
+  refreshTokens        RefreshToken[]
+  oauthAccounts        OAuthAccount[]
+  securityAuditLogs    SecurityAuditLog[]
+  notifications        Notification[]
+  achievements         UserAchievement[]
+  certificates         Certificate[]
+  xpHistory            XPHistory[]
+  dailyStreaks         DailyStreak[]
+  lessonProgress       LessonProgress[]
+  quizAttempts         QuizAttempt[]
+  lessonNotes          LessonNote[]
+  savedQueries         SavedQuery[]
+  queryHistory         QueryHistory[]
+  favoriteQueries      FavoriteQuery[]
+  practiceDatabases    PracticeDatabase[]
+  challengeAttempts    ChallengeAttempt[]
+  portfolioProjects    PortfolioProject[]
+  interviewSessions    InterviewSession[]
+  resumeVersions       ResumeVersion[]
+  careerGoals          CareerGoal[]
+  datasets             Dataset[]
+  dashboards           AnalyticsDashboard[]
+  dashboardShares      DashboardShare[]
+  dashboardComments    DashboardComment[]
+  communityPosts       CommunityPost[]
+  postComments         PostComment[]
+  postLikes            PostLike[]
+  postBookmarks        PostBookmark[]
+  following            UserFollower[]    @relation("FollowerRelation")
+  followers            UserFollower[]    @relation("FollowingRelation")
+  sentMessages         DirectMessage[]   @relation("SentMessages")
+  receivedMessages     DirectMessage[]   @relation("ReceivedMessages")
+  subscription         Subscription?
+  payments             Payment[]
+
+  @@index([email])
+  @@index([username])
+  @@index([role])
+}
+
+model Profile {
+  id               String   @id @default(uuid())
+  userId           String   @unique
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  preferredDialect SqlDialect @default(POSTGRESQL)
+  githubUrl        String?
+  linkedinUrl      String?
+  portfolioUrl     String?
+  location         String?
+  yearsExperience  Int      @default(0)
+  targetRole       JobRoleType?
+  hourlyRateUsd    Float?
+  isAvailableForHire Boolean @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model UserSetting {
+  id                 String          @id @default(uuid())
+  userId             String          @unique
+  user               User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  theme              ThemePreference @default(DARK)
+  defaultDialect     SqlDialect      @default(POSTGRESQL)
+  emailNotifications Boolean         @default(true)
+  autoFormatSql      Boolean         @default(true)
+  showLeaderboard    Boolean         @default(true)
+  editorFontSize     Int             @default(14)
+  tabSize            Int             @default(2)
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+}
+
+model RefreshToken {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String   @unique
+  familyId   String
+  isRevoked  Boolean  @default(false)
+  ipAddress  String
+  userAgent  String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@index([familyId])
+}
+
+model EmailVerificationToken {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([token])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  isUsed    Boolean  @default(false)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([token])
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ipAddress    String
+  userAgent    String
+  lastActiveAt DateTime @default(now())
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+}
+
+model OAuthAccount {
+  id             String        @id @default(uuid())
+  userId         String
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider       OAuthProvider
+  providerUserId String
+  email          String
+  createdAt      DateTime      @default(now())
+
+  @@unique([provider, providerUserId])
+  @@index([userId])
+}
+
+model SecurityAuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action    String
+  ipAddress String
+  userAgent String
+  details   Json?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  type      NotificationType @default(INFO)
+  isRead    Boolean          @default(false)
+  linkUrl   String?
+  createdAt DateTime         @default(now())
+
+  @@index([userId])
+  @@index([isRead])
+}
+
+model Achievement {
+  id          String   @id @default(uuid())
+  code        String   @unique
+  title       String
+  description String
+  badgeIcon   String
+  xpReward    Int      @default(100)
+  createdAt   DateTime @default(now())
+
+  users       UserAchievement[]
+}
+
+model UserAchievement {
+  id            String      @id @default(uuid())
+  userId        String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievementId String
+  achievement   Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+  unlockedAt    DateTime    @default(now())
+
+  @@unique([userId, achievementId])
+}
+
+model XPHistory {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount    Int
+  reason    String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model DailyStreak {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  streakDate   DateTime
+  activityCount Int     @default(1)
+  createdAt    DateTime @default(now())
+
+  @@unique([userId, streakDate])
+  @@index([userId])
+}
+
+// ==========================================
+// ACADEMY & CURRICULUM TABLES
+// ==========================================
+
+model AcademyTrack {
+  id          String          @id @default(uuid())
+  slug        String          @unique
+  title       String
+  description String
+  difficulty  TrackDifficulty @default(FUNDAMENTALS)
+  iconName    String
+  colorHex    String
+  orderIndex  Int             @default(0)
+  isPublished Boolean         @default(true)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  modules     AcademyModule[]
+  certificates Certificate[]
+}
+
+model AcademyModule {
+  id          String       @id @default(uuid())
+  trackId     String
+  track       AcademyTrack @relation(fields: [trackId], references: [id], onDelete: Cascade)
+  slug        String
+  title       String
+  description String
+  orderIndex  Int          @default(0)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  lessons     AcademyLesson[]
+
+  @@unique([trackId, slug])
+}
+
+model AcademyLesson {
+  id             String        @id @default(uuid())
+  moduleId       String
+  module         AcademyModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  slug           String
+  title          String
+  description    String
+  contentMarkdown String
+  initialSql     String?
+  solutionSql    String?
+  xpReward       Int           @default(50)
+  estimatedMin   Int           @default(10)
+  orderIndex     Int           @default(0)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  progress       LessonProgress[]
+  quizQuestions  QuizQuestion[]
+  notes          LessonNote[]
+
+  @@unique([moduleId, slug])
+}
+
+model LessonProgress {
+  id          String        @id @default(uuid())
+  userId      String
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lessonId    String
+  lesson      AcademyLesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  completed   Boolean       @default(false)
+  score       Int           @default(100)
+  completedAt DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@unique([userId, lessonId])
+  @@index([userId])
+}
+
+model QuizQuestion {
+  id            String        @id @default(uuid())
+  lessonId      String
+  lesson        AcademyLesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  questionText  String
+  explanation   String
+  optionsJson   Json          // String array of multiple choice options
+  correctIndex  Int           @default(0)
+  orderIndex    Int           @default(0)
+  createdAt     DateTime      @default(now())
+
+  attempts      QuizAttempt[]
+}
+
+model QuizAttempt {
+  id             String       @id @default(uuid())
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questionId     String
+  question       QuizQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  selectedOption Int
+  isCorrect      Boolean
+  attemptedAt    DateTime     @default(now())
+
+  @@index([userId])
+}
+
+model LessonNote {
+  id          String        @id @default(uuid())
+  userId      String
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lessonId    String
+  lesson      AcademyLesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  noteText    String
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@unique([userId, lessonId])
+}
+
+model Certificate {
+  id             String        @id @default(uuid())
+  userId         String
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trackId        String
+  track          AcademyTrack  @relation(fields: [trackId], references: [id], onDelete: Cascade)
+  title          String
+  credentialId   String        @unique
+  skillsVerified Json          // String array of verified skills
+  certificateUrl String?
+  issuedAt       DateTime      @default(now())
+
+  @@index([userId])
+  @@index([credentialId])
+}
+
+// ==========================================
+// PLAYGROUND & DATABASE ENGINE TABLES
+// ==========================================
+
+model SavedQuery {
+  id          String     @id @default(uuid())
+  userId      String
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  query       String
+  dialect     SqlDialect @default(POSTGRESQL)
+  isFavorite  Boolean    @default(false)
+  tags        Json       // String array of tags
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([userId])
+  @@index([dialect])
+}
+
+model QueryHistory {
+  id              String     @id @default(uuid())
+  userId          String
+  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  query           String
+  dialect         SqlDialect @default(POSTGRESQL)
+  status          String     // "success" | "error"
+  executionTimeMs Int
+  rowCount        Int        @default(0)
+  errorMessage    String?
+  executedAt      DateTime   @default(now())
+
+  @@index([userId])
+  @@index([executedAt])
+}
+
+model FavoriteQuery {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  query     String
+  title     String
+  dialect   SqlDialect @default(POSTGRESQL)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model SQLTemplate {
+  id          String     @id @default(uuid())
+  category    String
+  title       String
+  description String
+  sqlCode     String
+  dialect     SqlDialect @default(POSTGRESQL)
+  complexity  String     @default("Medium")
+  createdAt   DateTime   @default(now())
+
+  @@index([category])
+  @@index([dialect])
+}
+
+model PracticeDatabase {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  description String
+  dialect     SqlDialect @default(POSTGRESQL)
+  schemaJson  Json
+  seedDataJson Json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId])
+}
+
+// ==========================================
+// CHALLENGES TABLES
+// ==========================================
+
+model Challenge {
+  id             String              @id @default(uuid())
+  slug           String              @unique
+  title          String
+  description    String
+  difficulty     ChallengeDifficulty @default(BEGINNER)
+  category       String
+  dialect        SqlDialect          @default(POSTGRESQL)
+  initialSql     String
+  solutionSql    String
+  xpReward       Int                 @default(100)
+  schemaSetupSql String
+  isDaily        Boolean             @default(false)
+  scheduledDate  DateTime?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  testCases      ChallengeTestCase[]
+  hints          ChallengeHint[]
+  attempts       ChallengeAttempt[]
+
+  @@index([difficulty])
+  @@index([isDaily])
+}
+
+model ChallengeTestCase {
+  id             String    @id @default(uuid())
+  challengeId    String
+  challenge      Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  expectedOutput Json      // Array of objects representing dataset rows
+  description    String
+  orderIndex     Int       @default(0)
+}
+
+model ChallengeHint {
+  id          String    @id @default(uuid())
+  challengeId String
+  challenge   Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  hintText    String
+  orderIndex  Int       @default(0)
+  xpCost      Int       @default(10)
+}
+
+model ChallengeAttempt {
+  id              String    @id @default(uuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  challengeId     String
+  challenge       Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  submittedQuery  String
+  passed          Boolean   @default(false)
+  executionTimeMs Int
+  score           Int       @default(0)
+  submittedAt     DateTime  @default(now())
+
+  @@index([userId])
+  @@index([challengeId])
+  @@index([passed])
+}
+
+// ==========================================
+// PORTFOLIO & CAREER TABLES
+// ==========================================
+
+model PortfolioProject {
+  id          String     @id @default(uuid())
+  userId      String
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  description String
+  dialect     SqlDialect @default(POSTGRESQL)
+  sqlSchema   String
+  queries     Json       // Array of query objects
+  tags        Json       // String array of tags
+  githubUrl   String?
+  isFeatured  Boolean    @default(false)
+  viewsCount  Int        @default(0)
+  likesCount  Int        @default(0)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([userId])
+  @@index([isFeatured])
+}
+
+model InterviewSession {
+  id          String     @id @default(uuid())
+  userId      String
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  targetRole  JobRoleType
+  score       Int        @default(0)
+  feedback    String
+  startedAt   DateTime   @default(now())
+  completedAt DateTime?
+
+  questions   InterviewQuestion[]
+
+  @@index([userId])
+}
+
+model InterviewQuestion {
+  id          String           @id @default(uuid())
+  sessionId   String
+  session     InterviewSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  question    String
+  userAnswer  String?
+  modelAnswer String
+  score       Int              @default(0)
+  feedback    String?
+}
+
+model ResumeVersion {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  contentJson Json
+  atsScore    Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model CareerGoal {
+  id             String      @id @default(uuid())
+  userId         String
+  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  targetRole     JobRoleType
+  targetSalaryUsd Int?
+  timeframeMonths Int        @default(6)
+  isCompleted    Boolean     @default(false)
+  createdAt      DateTime    @default(now())
+
+  @@index([userId])
+}
+
+// ==========================================
+// DATASET BUILDER TABLES
+// ==========================================
+
+model Dataset {
+  id          String         @id @default(uuid())
+  userId      String
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  description String
+  category    String
+  rowCount    Int            @default(0)
+  tableCount  Int            @default(1)
+  sizeBytes   Int            @default(0)
+  schemaJson  Json
+  isPublic    Boolean        @default(false)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  tables      DatasetTable[]
+
+  @@index([userId])
+  @@index([isPublic])
+}
+
+model DatasetTable {
+  id        String          @id @default(uuid())
+  datasetId String
+  dataset   Dataset         @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+  tableName String
+  rowCount  Int             @default(0)
+  columns   DatasetColumn[]
+}
+
+model DatasetColumn {
+  id         String       @id @default(uuid())
+  tableId    String
+  table      DatasetTable @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  columnName String
+  dataType   String
+  isNullable Boolean      @default(true)
+  isPrimaryKey Boolean    @default(false)
+  generatorType String?
+}
+
+// ==========================================
+// ANALYTICS & BI DASHBOARD TABLES
+// ==========================================
+
+model AnalyticsDashboard {
+  id               String            @id @default(uuid())
+  userId           String
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title            String
+  description      String?
+  theme            ThemePreference   @default(DARK)
+  layout           Json              // Array of layout positions
+  isPublished      Boolean           @default(false)
+  publicShareToken String?           @unique
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  widgets          AnalyticsWidget[]
+  shares           DashboardShare[]
+  comments         DashboardComment[]
+
+  @@index([userId])
+  @@index([publicShareToken])
+}
+
+model AnalyticsWidget {
+  id          String             @id @default(uuid())
+  dashboardId String
+  dashboard   AnalyticsDashboard @relation(fields: [dashboardId], references: [id], onDelete: Cascade)
+  title       String
+  type        WidgetType         @default(BAR_CHART)
+  query       String
+  configJson  Json               // Color schemes, axis labels, parameters
+  orderIndex  Int                @default(0)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  @@index([dashboardId])
+}
+
+model DashboardShare {
+  id          String             @id @default(uuid())
+  dashboardId String
+  dashboard   AnalyticsDashboard @relation(fields: [dashboardId], references: [id], onDelete: Cascade)
+  sharedWithUserId String
+  sharedWith  User               @relation(fields: [sharedWithUserId], references: [id], onDelete: Cascade)
+  canEdit     Boolean            @default(false)
+  createdAt   DateTime           @default(now())
+
+  @@unique([dashboardId, sharedWithUserId])
+}
+
+model DashboardComment {
+  id          String             @id @default(uuid())
+  dashboardId String
+  dashboard   AnalyticsDashboard @relation(fields: [dashboardId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  commentText String
+  createdAt   DateTime           @default(now())
+
+  @@index([dashboardId])
+}
+
+// ==========================================
+// COMMUNITY & SOCIAL TABLES
+// ==========================================
+
+model CommunityPost {
+  id          String       @id @default(uuid())
+  userId      String
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  content     String
+  category    PostCategory @default(GENERAL)
+  sqlSnippet  String?
+  dialect     SqlDialect?  @default(POSTGRESQL)
+  viewsCount  Int          @default(0)
+  likesCount  Int          @default(0)
+  commentsCount Int        @default(0)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  comments    PostComment[]
+  likes       PostLike[]
+  bookmarks   PostBookmark[]
+
+  @@index([userId])
+  @@index([category])
+}
+
+model PostComment {
+  id        String        @id @default(uuid())
+  postId    String
+  post      CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  content   String
+  createdAt DateTime      @default(now())
+
+  @@index([postId])
+}
+
+model PostLike {
+  id        String        @id @default(uuid())
+  postId    String
+  post      CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime      @default(now())
+
+  @@unique([postId, userId])
+}
+
+model PostBookmark {
+  id        String        @id @default(uuid())
+  postId    String
+  post      CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime      @default(now())
+
+  @@unique([postId, userId])
+}
+
+model UserFollower {
+  id          String   @id @default(uuid())
+  followerId  String
+  follower    User     @relation("FollowerRelation", fields: [followerId], references: [id], onDelete: Cascade)
+  followingId String
+  following   User     @relation("FollowingRelation", fields: [followingId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+
+  @@unique([followerId, followingId])
+}
+
+model DirectMessage {
+  id          String   @id @default(uuid())
+  senderId    String
+  sender      User     @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  receiverId  String
+  receiver    User     @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+  messageText String
+  isRead      Boolean  @default(false)
+  sentAt      DateTime @default(now())
+
+  @@index([senderId])
+  @@index([receiverId])
+}
+
+// ==========================================
+// BILLING & SUBSCRIPTIONS TABLES
+// ==========================================
+
+model Plan {
+  id            String          @id @default(uuid())
+  name          String          @unique
+  code          String          @unique
+  description   String
+  priceMonthlyUsd Float
+  priceYearlyUsd  Float
+  featuresJson  Json            // Array of feature strings
+  createdAt     DateTime        @default(now())
+
+  subscriptions Subscription[]
+}
+
+model Subscription {
+  id            String             @id @default(uuid())
+  userId        String             @unique
+  user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planId        String
+  plan          Plan               @relation(fields: [planId], references: [id])
+  status        SubscriptionStatus @default(INACTIVE)
+  interval      BillingInterval    @default(MONTHLY)
+  currentPeriodStart DateTime
+  currentPeriodEnd   DateTime
+  canceledAt    DateTime?
+  createdAt     DateTime           @default(now())
+
+  @@index([userId])
+}
+
+model Payment {
+  id            String   @id @default(uuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amountUsd     Float
+  currency      String   @default("USD")
+  status        String   // "succeeded" | "failed" | "pending"
+  paymentMethod String
+  receiptUrl    String?
+  createdAt     DateTime @default(now())
+
+  @@index([userId])
+}

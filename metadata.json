@@ -1,0 +1,6 @@
+{
+  "name": "MobileSQL",
+  "description": "AI-powered mobile-first SQL learning platform and interactive database workspace.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
