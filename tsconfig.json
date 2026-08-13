@@ -26,5 +26,7 @@
     "strictNullChecks": true,
     "allowImportingTsExtensions": true,
     "noEmit": true
-  }
+  },
+  "include": ["src", "server.ts", "vite.config.ts"],
+  "exclude": ["node_modules", "dist", "e2e", "src/tests", "playwright.config.ts", "vitest.config.ts"]
 }

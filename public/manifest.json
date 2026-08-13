@@ -1,0 +1,25 @@
+{
+  "name": "MobileSQL — Mobile SQL IDE & Academy",
+  "short_name": "MobileSQL",
+  "description": "AI-powered mobile-first SQL learning platform and interactive database workspace.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0D0D0E",
+  "theme_color": "#0D0D0E",
+  "orientation": "portrait-primary",
+  "categories": ["education", "developer tools", "productivity"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
