@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { Suspense } from 'react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './services/reactQuery';
 import { useUIStore } from './stores/useUIStore';
 import { AppShell } from './components/layout/AppShell';
+import { ErrorBoundary } from './components/shared/ErrorBoundary';
 import { DashboardView } from './components/dashboard/DashboardView';
 import { PlaygroundView } from './components/playground/PlaygroundView';
 import { AcademyView } from './components/academy/AcademyView';
@@ -26,7 +27,7 @@ import {
 } from './components/shared/StateDisplays';
 
 function ActiveTabContent() {
-  const { activeTab, setActiveTab, setSearchOpen, setCopilotOpen, addToast } = useUIStore();
+  const activeTab = useUIStore((s) => s.activeTab);
 
   if (activeTab === 'dashboard') {
     return (
@@ -130,9 +131,13 @@ function ActiveTabContent() {
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <AppShell>
-        <ActiveTabContent />
-      </AppShell>
+      <ErrorBoundary moduleName="MobileSQL Core Shell">
+        <AppShell>
+          <ErrorBoundary moduleName="Active Workspace Canvas">
+            <ActiveTabContent />
+          </ErrorBoundary>
+        </AppShell>
+      </ErrorBoundary>
     </QueryClientProvider>
   );
 }
