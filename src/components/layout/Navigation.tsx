@@ -164,18 +164,18 @@ export const Navbar: React.FC = () => {
         {/* Daily Streak Pill */}
         <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#F59E0B]/10 border border-[#F59E0B]/30 text-xs font-mono font-bold text-[#F59E0B]">
           <Flame className="w-3.5 h-3.5 fill-current animate-pulse text-[#F59E0B]" />
-          <span>{user.streakDays}d</span>
+          <span>{user?.streakDays || 1}d</span>
         </div>
 
         {/* Level Badge */}
         <div className="hidden xs:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#62DF7D]/10 border border-[#62DF7D]/30 text-xs font-mono font-bold text-[#62DF7D]">
           <Sparkles className="w-3.5 h-3.5" />
-          <span>LVL {user.level}</span>
+          <span>LVL {user?.level || 1}</span>
         </div>
 
         {/* XP Counter */}
         <div className="hidden md:flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#232326] border border-[#2D2D31] text-xs font-mono font-bold text-[#C8C8CC]">
-          <span className="text-[#62DF7D]">{user.xp.toLocaleString()}</span>
+          <span className="text-[#62DF7D]">{(user?.xp || 100).toLocaleString()}</span>
           <span className="text-[10px] text-[#8A8A90]">XP</span>
         </div>
 
@@ -212,21 +212,33 @@ export const Navbar: React.FC = () => {
           <span className="hidden xl:inline text-[11px]">Copilot</span>
         </button>
 
-        {/* User Profile Avatar Trigger */}
+        {/* User Profile Avatar / Sign In Trigger */}
         <div className="relative">
-          <button
-            onClick={() => setProfileMenuOpen(!isProfileMenuOpen)}
-            className={cn(
-              'w-8 h-8 rounded-full bg-[#1B1B1E] border flex items-center justify-center font-mono font-bold text-xs text-[#62DF7D] transition-all relative overflow-hidden',
-              isProfileMenuOpen ? 'border-[#62DF7D] ring-2 ring-[#62DF7D]/30' : 'border-[#2D2D31] hover:border-[#62DF7D]/60'
-            )}
-            aria-label="User Profile"
-          >
-            {user.name.charAt(0)}
-            <span className="absolute bottom-0 right-0 w-2 h-2 rounded-full bg-[#22C55E] border border-[#131315]" />
-          </button>
+          {user ? (
+            <button
+              onClick={() => setProfileMenuOpen(!isProfileMenuOpen)}
+              className={cn(
+                'w-8 h-8 rounded-full bg-[#1B1B1E] border flex items-center justify-center font-mono font-bold text-xs text-[#62DF7D] transition-all relative overflow-hidden cursor-pointer',
+                isProfileMenuOpen ? 'border-[#62DF7D] ring-2 ring-[#62DF7D]/30' : 'border-[#2D2D31] hover:border-[#62DF7D]/60'
+              )}
+              aria-label="User Profile"
+            >
+              {user.name?.charAt(0) || 'U'}
+              <span className="absolute bottom-0 right-0 w-2 h-2 rounded-full bg-[#22C55E] border border-[#131315]" />
+            </button>
+          ) : (
+            <button
+              onClick={() => {
+                setActiveTab('login');
+                window.history.pushState(null, '', '/login');
+              }}
+              className="px-3 py-1.5 rounded-xl bg-[#62DF7D] text-[#003914] font-bold text-xs hover:bg-[#79F292] transition-all cursor-pointer shadow-sm"
+            >
+              Sign In
+            </button>
+          )}
 
-          <ProfileMenuDropdown />
+          {user && <ProfileMenuDropdown />}
         </div>
       </div>
     </header>

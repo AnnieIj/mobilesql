@@ -37,14 +37,14 @@ export const AccountExportPrivacyTab: React.FC = () => {
 
   const handleExportJSON = () => {
     const exportData = {
-      user,
+      user: user || {},
       preferences: useAccountStore.getState().preferences,
       exportTimestamp: new Date().toISOString(),
       sqlPlaygroundQueries: [
         { title: 'Monthly Revenue Window Function', query: 'SELECT date_trunc(\'month\', created_at), SUM(amount) OVER() FROM orders;' },
         { title: 'Customer Churn CTE', query: 'WITH inactive_users AS (SELECT id FROM users WHERE last_login < NOW() - INTERVAL \'90 days\') SELECT * FROM inactive_users;' },
       ],
-      academyProgress: { completedModules: 12, xp: user.xp, streakDays: user.streakDays },
+      academyProgress: { completedModules: 12, xp: user?.xp || 100, streakDays: user?.streakDays || 1 },
       certificates: [{ id: 'MSQL-9942A', title: 'SQL Master Architect', issueDate: '2026-02-10' }],
     };
 
@@ -52,16 +52,22 @@ export const AccountExportPrivacyTab: React.FC = () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `mobilesql_account_export_${user.name.toLowerCase().replace(/\s+/g, '_')}.json`;
+    const safeName = (user?.name || 'developer').toLowerCase().replace(/\s+/g, '_');
+    a.download = `mobilesql_account_export_${safeName}.json`;
     a.click();
     addToast({ title: 'JSON Export Complete', message: 'Full account backup downloaded.', type: 'success' });
   };
 
   const handleExportCSV = () => {
+    const safeName = user?.name || 'Developer';
+    const safeLevel = user?.level || 1;
+    const safeXp = user?.xp || 100;
+    const safeQueries = user?.queriesRun || 14;
+
     const csvContent = [
       'Category,Item Title,Metrics,Date',
-      `User Profile,${user.name},Level ${user.level} (${user.xp} XP),${new Date().toISOString().split('T')[0]}`,
-      `Statistics,Queries Executed,${user.queriesRun} queries,2026-08-13`,
+      `User Profile,${safeName},Level ${safeLevel} (${safeXp} XP),${new Date().toISOString().split('T')[0]}`,
+      `Statistics,Queries Executed,${safeQueries} queries,2026-08-13`,
       `Certificate,SQL Master Architect,Verification ID MSQL-9942A,2026-02-10`,
       `Portfolio,Realtime E-Commerce Analytics,Star-Schema Postgres,2026-02-12`,
     ].join('\n');
@@ -70,7 +76,7 @@ export const AccountExportPrivacyTab: React.FC = () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `mobilesql_data_${user.name.toLowerCase().replace(/\s+/g, '_')}.csv`;
+    a.download = `mobilesql_data_${safeName.toLowerCase().replace(/\s+/g, '_')}.csv`;
     a.click();
     addToast({ title: 'CSV Downloaded', message: 'Account metrics CSV exported successfully.', type: 'success' });
   };

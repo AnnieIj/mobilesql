@@ -32,16 +32,16 @@ export const PlaygroundHeaderStats: React.FC<HeaderStatsProps> = ({
       {/* Left: User Level & XP Meter */}
       <div className="flex items-center gap-3">
         <Badge variant="emerald" icon={<Sparkles className="w-3.5 h-3.5 text-[#62DF7D]" />}>
-          LVL {user.level} Architect
+          LVL {user?.level || 1} Architect
         </Badge>
 
         <div className="hidden sm:flex items-center gap-2 min-w-[160px]">
           <div className="w-full space-y-0.5">
             <div className="flex justify-between text-[10px] font-mono text-[#8A8A90]">
               <span>XP Progress</span>
-              <span className="text-[#62DF7D] font-bold">3,450 / 5,000</span>
+              <span className="text-[#62DF7D] font-bold">{(user?.xp || 100).toLocaleString()} / {(user?.nextLevelXp || 1500).toLocaleString()}</span>
             </div>
-            <ProgressBar value={69} height="sm" color="emerald" showValue={false} />
+            <ProgressBar value={Math.min(100, Math.round(((user?.xp || 100) / (user?.nextLevelXp || 1500)) * 100))} height="sm" color="emerald" showValue={false} />
           </div>
         </div>
 
@@ -49,7 +49,7 @@ export const PlaygroundHeaderStats: React.FC<HeaderStatsProps> = ({
         <div className="flex items-center gap-2 font-mono">
           <span className="flex items-center gap-1 text-[#F59E0B] font-bold bg-[#F59E0B]/10 px-2 py-0.5 rounded border border-[#F59E0B]/30">
             <Flame className="w-3.5 h-3.5 fill-current animate-pulse" />
-            {user.streakDays}d Streak
+            {user?.streakDays || 1}d Streak
           </span>
 
           <span className="hidden md:flex items-center gap-1 text-[#62DF7D] font-bold bg-[#62DF7D]/10 px-2 py-0.5 rounded border border-[#62DF7D]/30">

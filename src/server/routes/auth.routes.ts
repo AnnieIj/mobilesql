@@ -13,7 +13,7 @@ import {
   oauthLoginSchema,
   guestLoginSchema,
 } from '../schemas/auth.schema';
-import { authenticateToken } from '../middlewares/auth';
+import { authenticateToken, optionalAuth } from '../middlewares/auth';
 
 const router = Router();
 
@@ -36,7 +36,7 @@ router.post('/verify-email', validateRequest(verifyEmailSchema), AuthController.
 
 // Protected User Security & Session Endpoints
 router.get('/me', authenticateToken, AuthController.me);
-router.post('/logout', authenticateToken, AuthController.logout);
+router.post('/logout', optionalAuth, AuthController.logout);
 router.patch('/change-password', authenticateToken, validateRequest(changePasswordSchema), AuthController.changePassword);
 router.patch('/change-email', authenticateToken, validateRequest(changeEmailSchema), AuthController.changeEmail);
 

@@ -43,9 +43,9 @@ export const HeroWelcomeSection: React.FC = () => {
         <div className="space-y-2 max-w-2xl">
           <div className="flex items-center gap-2 flex-wrap">
             <Badge variant="emerald" icon={<Sparkles className="w-3.5 h-3.5 text-[#62DF7D]" />}>
-              {greeting}, {user.name}
+              {greeting}, {user?.name || 'Engineer'}
             </Badge>
-            <span className="text-xs font-mono text-[#8A8A90]">SQL Engineer • LVL {user.level}</span>
+            <span className="text-xs font-mono text-[#8A8A90]">SQL Engineer • LVL {user?.level || 1}</span>
           </div>
 
           <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-[#FFFFFF]">
@@ -55,7 +55,7 @@ export const HeroWelcomeSection: React.FC = () => {
           {/* Motivation Quote */}
           <div className="flex items-start gap-2 pt-1 text-xs text-[#C8C8CC] italic leading-relaxed bg-[#1B1B1E]/60 p-3 rounded-xl border border-[#2D2D31]/80">
             <Quote className="w-4 h-4 text-[#62DF7D] shrink-0 mt-0.5" />
-            <span>"{randomQuote}"</span>
+            <span>&quot;{randomQuote}&quot;</span>
           </div>
         </div>
 
@@ -64,7 +64,7 @@ export const HeroWelcomeSection: React.FC = () => {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5 font-mono text-xs text-[#F59E0B]">
               <Flame className="w-4 h-4 fill-current animate-pulse" />
-              <span className="font-bold">{user.streakDays} Day Streak</span>
+              <span className="font-bold">{user?.streakDays || 1} Day Streak</span>
             </div>
             <div className="flex items-center gap-1 font-mono text-xs text-[#62DF7D]">
               <TrendingUp className="w-3.5 h-3.5" />

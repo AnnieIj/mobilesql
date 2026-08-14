@@ -35,8 +35,8 @@ export const SettingsView: React.FC = () => {
         <div className="flex items-center gap-4">
           <div className="relative">
             <img
-              src={user.avatarUrl}
-              alt={user.name}
+              src={user?.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80'}
+              alt={user?.name || 'User'}
               className="w-14 h-14 rounded-2xl object-cover border-2 border-[#62DF7D] shadow-lg"
             />
             <span className="absolute -bottom-1 -right-1 w-4 h-4 bg-[#62DF7D] rounded-full border-2 border-[#131315] animate-pulse" />
@@ -44,12 +44,12 @@ export const SettingsView: React.FC = () => {
 
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-base sm:text-lg font-bold text-[#FFFFFF]">{user.name}</h1>
+              <h1 className="text-base sm:text-lg font-bold text-[#FFFFFF]">{user?.name || 'Enterprise Developer'}</h1>
               <span className="px-2.5 py-0.5 rounded-full bg-[#62DF7D]/20 text-[#62DF7D] border border-[#62DF7D]/40 font-mono text-[10px] font-bold">
-                Level {user.level} {user.division}
+                Level {user?.level || 1} {user?.division || 'SQL Engineer'}
               </span>
             </div>
-            <p className="text-xs text-[#8A8A90] font-mono">{user.email} • {user.title}</p>
+            <p className="text-xs text-[#8A8A90] font-mono">{user?.email || 'user@mobilesql.io'} • {user?.title || 'Engineer'}</p>
           </div>
         </div>
 

@@ -1,77 +1,73 @@
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion } from 'motion/react';
 import {
   X,
   Mail,
   Lock,
   User,
   Shield,
-  KeyRound,
-  Check,
   Sparkles,
   ArrowRight,
   ShieldCheck,
   Github,
   Globe,
-  Smartphone,
+  AlertCircle,
 } from 'lucide-react';
 import { useUIStore } from '../../stores/useUIStore';
 import { useAuthStore } from '../../stores/useAuthStore';
-import { useAccountStore } from '../../stores/useAccountStore';
 
 export const AuthModal: React.FC = () => {
   const { isAuthModalOpen, setAuthModalOpen, addToast } = useUIStore();
-  const { user, setUser } = useAuthStore();
-  const { connectProvider } = useAccountStore();
+  const { loginWithBackend, registerWithBackend, loginWithOAuth, loginWithGuest, isLoading } = useAuthStore();
 
   const [mode, setMode] = useState<'login' | 'signup' | 'guest'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   if (!isAuthModalOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSubmitting(true);
+    setErrorMsg(null);
 
-    setTimeout(() => {
-      setIsSubmitting(false);
-      setUser({
-        ...user,
-        name: name || (email ? email.split('@')[0] : 'Enterprise Architect'),
-        email: email || 'architect@mobilesql.io',
-        isGuest: mode === 'guest',
-      });
-
-      addToast({
-        title: mode === 'signup' ? 'Account Provisioned' : 'Authenticated Successfully',
-        message: `Signed in as ${email || 'Guest Architect'}. Enterprise session active.`,
-        type: 'success',
-      });
-      setAuthModalOpen(false);
-    }, 800);
+    try {
+      if (mode === 'guest') {
+        await loginWithGuest('Guest Architect');
+        setAuthModalOpen(false);
+      } else if (mode === 'signup') {
+        const username = (name || email.split('@')[0]).toLowerCase().replace(/[^a-z0-9_]/g, '');
+        await registerWithBackend({
+          name: name || 'Enterprise Engineer',
+          username,
+          email,
+          password,
+          role: 'engineer',
+          rememberMe: true,
+        });
+        setAuthModalOpen(false);
+      } else {
+        await loginWithBackend({
+          email,
+          password,
+          rememberMe: true,
+        });
+        setAuthModalOpen(false);
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Authentication failed.');
+    }
   };
 
-  const handleSocialLogin = (provider: 'google' | 'github' | 'microsoft' | 'apple', providerName: string) => {
-    setIsSubmitting(true);
-    setTimeout(() => {
-      setIsSubmitting(false);
-      connectProvider(provider, `alex.${provider}@mobilesql.io`);
-      setUser({
-        ...user,
-        name: `Alex (${providerName})`,
-        email: `alex.${provider}@mobilesql.io`,
-        isGuest: false,
-      });
-      addToast({
-        title: `${providerName} Connected`,
-        message: 'OAuth SSO token validated. Enterprise session synced.',
-        type: 'success',
-      });
+  const handleSocialLogin = async (provider: 'google' | 'github' | 'microsoft') => {
+    setErrorMsg(null);
+    try {
+      await loginWithOAuth(provider);
       setAuthModalOpen(false);
-    }, 600);
+    } catch (err: any) {
+      setErrorMsg(err.message || `Failed to authenticate with ${provider}.`);
+    }
   };
 
   return (
@@ -109,7 +105,10 @@ export const AuthModal: React.FC = () => {
         {/* Mode Switch Tabs */}
         <div className="grid grid-cols-3 bg-[#131315] border-b border-[#2D2D31] p-1.5 gap-1 text-xs font-mono">
           <button
-            onClick={() => setMode('login')}
+            onClick={() => {
+              setMode('login');
+              setErrorMsg(null);
+            }}
             className={`py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
               mode === 'login'
                 ? 'bg-[#62DF7D] text-[#131315]'
@@ -119,7 +118,10 @@ export const AuthModal: React.FC = () => {
             Sign In
           </button>
           <button
-            onClick={() => setMode('signup')}
+            onClick={() => {
+              setMode('signup');
+              setErrorMsg(null);
+            }}
             className={`py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
               mode === 'signup'
                 ? 'bg-[#62DF7D] text-[#131315]'
@@ -129,7 +131,10 @@ export const AuthModal: React.FC = () => {
             Create Account
           </button>
           <button
-            onClick={() => setMode('guest')}
+            onClick={() => {
+              setMode('guest');
+              setErrorMsg(null);
+            }}
             className={`py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
               mode === 'guest'
                 ? 'bg-[#62DF7D] text-[#131315]'
@@ -141,6 +146,13 @@ export const AuthModal: React.FC = () => {
         </div>
 
         <div className="p-5 space-y-4 text-xs font-mono">
+          {errorMsg && (
+            <div className="p-3 rounded-xl bg-[#EF4444]/15 border border-[#EF4444]/40 flex items-start gap-2.5 text-xs text-[#EF4444]">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <p className="leading-snug">{errorMsg}</p>
+            </div>
+          )}
+
           {mode === 'guest' ? (
             <div className="space-y-4 py-2">
               <div className="p-4 rounded-xl bg-[#1B1B1E] border border-[#2D2D31] space-y-2">
@@ -154,10 +166,11 @@ export const AuthModal: React.FC = () => {
 
               <button
                 onClick={handleSubmit}
-                disabled={isSubmitting}
-                className="w-full py-2.5 rounded-xl bg-[#62DF7D] hover:bg-[#52cc6c] text-[#131315] font-bold text-xs cursor-pointer flex items-center justify-center gap-2 transition-all shadow-md active:scale-95"
+                disabled={isLoading}
+                className="w-full py-2.5 rounded-xl bg-[#62DF7D] hover:bg-[#52cc6c] text-[#131315] font-bold text-xs cursor-pointer flex items-center justify-center gap-2 transition-all shadow-md active:scale-95 disabled:opacity-50"
               >
-                Continue as Guest Architect <ArrowRight className="w-4 h-4" />
+                {isLoading ? 'Establishing Session...' : 'Continue as Guest Architect'}
+                <ArrowRight className="w-4 h-4" />
               </button>
             </div>
           ) : (
@@ -168,30 +181,30 @@ export const AuthModal: React.FC = () => {
                   Enterprise Single Sign-On (SSO)
                 </span>
 
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-3 gap-2">
                   <button
-                    onClick={() => handleSocialLogin('google', 'Google Workspace')}
-                    className="p-2.5 rounded-xl bg-[#1B1B1E] border border-[#2D2D31] hover:border-[#62DF7D] text-[#FFFFFF] flex items-center gap-2 transition-all cursor-pointer text-[11px] font-sans"
+                    type="button"
+                    onClick={() => handleSocialLogin('google')}
+                    disabled={isLoading}
+                    className="p-2.5 rounded-xl bg-[#1B1B1E] border border-[#2D2D31] hover:border-[#62DF7D] text-[#FFFFFF] flex items-center justify-center gap-1.5 transition-all cursor-pointer text-[11px] font-sans"
                   >
-                    <Globe className="w-4 h-4 text-[#4285F4]" /> Google SSO
+                    <Globe className="w-3.5 h-3.5 text-[#4285F4]" /> Google
                   </button>
                   <button
-                    onClick={() => handleSocialLogin('github', 'GitHub Developer')}
-                    className="p-2.5 rounded-xl bg-[#1B1B1E] border border-[#2D2D31] hover:border-[#62DF7D] text-[#FFFFFF] flex items-center gap-2 transition-all cursor-pointer text-[11px] font-sans"
+                    type="button"
+                    onClick={() => handleSocialLogin('github')}
+                    disabled={isLoading}
+                    className="p-2.5 rounded-xl bg-[#1B1B1E] border border-[#2D2D31] hover:border-[#62DF7D] text-[#FFFFFF] flex items-center justify-center gap-1.5 transition-all cursor-pointer text-[11px] font-sans"
                   >
-                    <Github className="w-4 h-4 text-[#A855F7]" /> GitHub SSO
+                    <Github className="w-3.5 h-3.5 text-[#A855F7]" /> GitHub
                   </button>
                   <button
-                    onClick={() => handleSocialLogin('microsoft', 'Microsoft Azure')}
-                    className="p-2.5 rounded-xl bg-[#1B1B1E] border border-[#2D2D31] hover:border-[#62DF7D] text-[#FFFFFF] flex items-center gap-2 transition-all cursor-pointer text-[11px] font-sans"
+                    type="button"
+                    onClick={() => handleSocialLogin('microsoft')}
+                    disabled={isLoading}
+                    className="p-2.5 rounded-xl bg-[#1B1B1E] border border-[#2D2D31] hover:border-[#62DF7D] text-[#FFFFFF] flex items-center justify-center gap-1.5 transition-all cursor-pointer text-[11px] font-sans"
                   >
-                    <Shield className="w-4 h-4 text-[#00A4EF]" /> Microsoft ID
-                  </button>
-                  <button
-                    onClick={() => handleSocialLogin('apple', 'Apple ID')}
-                    className="p-2.5 rounded-xl bg-[#1B1B1E] border border-[#2D2D31] hover:border-[#62DF7D] text-[#FFFFFF] flex items-center gap-2 transition-all cursor-pointer text-[11px] font-sans opacity-90"
-                  >
-                    <Smartphone className="w-4 h-4 text-[#FFFFFF]" /> Apple ID
+                    <Shield className="w-3.5 h-3.5 text-[#00A4EF]" /> Microsoft
                   </button>
                 </div>
               </div>
@@ -253,11 +266,11 @@ export const AuthModal: React.FC = () => {
 
                 <button
                   type="submit"
-                  disabled={isSubmitting}
-                  className="w-full py-2.5 rounded-xl bg-[#62DF7D] hover:bg-[#52cc6c] text-[#131315] font-bold text-xs cursor-pointer flex items-center justify-center gap-2 transition-all shadow-md active:scale-95 pt-2"
+                  disabled={isLoading}
+                  className="w-full py-2.5 rounded-xl bg-[#62DF7D] hover:bg-[#52cc6c] text-[#131315] font-bold text-xs cursor-pointer flex items-center justify-center gap-2 transition-all shadow-md active:scale-95 pt-2 disabled:opacity-50"
                 >
-                  {isSubmitting ? (
-                    'Validating Credentials...'
+                  {isLoading ? (
+                    'Authenticating...'
                   ) : mode === 'signup' ? (
                     'Provision Enterprise Account'
                   ) : (
