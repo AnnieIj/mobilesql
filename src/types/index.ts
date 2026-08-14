@@ -135,6 +135,10 @@ export interface WorkspaceMetrics {
 }
 
 export type ActiveTab =
+  | 'login'
+  | 'register'
+  | 'forgot-password'
+  | 'verify-email'
   | 'dashboard'
   | 'academy'
   | 'playground'
