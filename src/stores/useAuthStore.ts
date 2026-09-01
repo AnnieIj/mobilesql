@@ -105,7 +105,7 @@ interface AuthState {
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
-      user: null,
+      user: DEFAULT_GUEST_USER,
       isAuthenticated: false,
       isDemoMode: false,
       isLoading: false,
@@ -297,7 +297,13 @@ export const useAuthStore = create<AuthState>()(
       },
 
       resetToDefaultGuest: () => {
-        get().loginWithGuest('Guest Engineer');
+        set({
+          user: DEFAULT_GUEST_USER,
+          isAuthenticated: false,
+          isDemoMode: false,
+          isLoading: false,
+          returnTab: null,
+        });
       },
 
       addXp: (amount) =>
@@ -365,7 +371,7 @@ export const useAuthStore = create<AuthState>()(
 
         // 4. Reset Auth Store State
         set({
-          user: null,
+          user: DEFAULT_GUEST_USER,
           isAuthenticated: false,
           isDemoMode: false,
           isLoading: false,
