@@ -404,7 +404,7 @@ export const useAuthStore = create<AuthState>()(
         const token = authTokens.getAccessToken();
         if (!token) {
           if (get().isAuthenticated) {
-            set({ user: null, isAuthenticated: false });
+            set({ user: DEFAULT_GUEST_USER, isAuthenticated: false });
           }
           return false;
         }
@@ -432,12 +432,12 @@ export const useAuthStore = create<AuthState>()(
             } catch (refreshErr) {
               // Refresh failed, clean up session
               authTokens.clear();
-              set({ user: null, isAuthenticated: false });
+              set({ user: DEFAULT_GUEST_USER, isAuthenticated: false });
               return false;
             }
           }
           authTokens.clear();
-          set({ user: null, isAuthenticated: false });
+          set({ user: DEFAULT_GUEST_USER, isAuthenticated: false });
           return false;
         }
 

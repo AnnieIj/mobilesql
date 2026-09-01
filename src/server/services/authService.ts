@@ -452,7 +452,7 @@ export class AuthService {
   async getCurrentUser(userId: string): Promise<Omit<User, 'passwordHash'>> {
     const user = await userRepository.findById(userId);
     if (!user) {
-      throw new NotFoundError('User account profile not found.');
+      throw new UnauthorizedError('Session expired or user account not found.');
     }
     const { passwordHash, ...userWithoutPassword } = user;
     return userWithoutPassword;
