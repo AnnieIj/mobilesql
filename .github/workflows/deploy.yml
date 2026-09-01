@@ -6,9 +6,16 @@ on:
     tags:
       - 'v*'
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
   deploy:
-    name: Build & Deploy Container
+    name: Build & Validate Container
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -26,3 +33,4 @@ jobs:
           tags: mobilesql/app:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+

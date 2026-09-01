@@ -10,9 +10,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   validate:
-    name: Lint, Typecheck & Security
+    name: Lint, Typecheck & Schema Validation
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -27,17 +30,17 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
+      - name: Prisma Schema Validation
+        run: npx prisma validate
+
       - name: Prisma Client Generation
         run: npx prisma generate
 
-      - name: TypeScript Typecheck
+      - name: TypeScript Typecheck & Lint
         run: npm run lint
 
-      - name: Security Audit
-        run: npm audit --audit-level=high || true
-
   test:
-    name: Unit & Integration Tests
+    name: Unit & Store Tests
     runs-on: ubuntu-latest
     needs: validate
     steps:
@@ -56,13 +59,13 @@ jobs:
       - name: Prisma Client Generation
         run: npx prisma generate
 
-      - name: Run Tests with Coverage
-        run: npx vitest run --coverage || true
+      - name: Run Test Suite
+        run: npm test
 
   build:
     name: Production Build & Bundle Check
     runs-on: ubuntu-latest
-    needs: test
+    needs: [validate, test]
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -79,7 +82,8 @@ jobs:
       - name: Prisma Client Generation
         run: npx prisma generate
 
-      - name: Build Application
+      - name: Build Application Bundle
         run: npm run build
         env:
           NODE_ENV: production
+
