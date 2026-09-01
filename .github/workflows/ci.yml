@@ -36,8 +36,14 @@ jobs:
       - name: Prisma Client Generation
         run: npx prisma generate
 
-      - name: TypeScript Typecheck & Lint
+      - name: TypeScript Typecheck
+        run: npm run typecheck
+
+      - name: Code Style & Lint
         run: npm run lint
+
+      - name: Dependency Security Audit
+        run: npm audit --audit-level=high || true
 
   test:
     name: Unit & Store Tests
