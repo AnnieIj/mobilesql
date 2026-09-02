@@ -11,7 +11,12 @@
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit",
     "test": "vitest run",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "db:migrate": "prisma migrate deploy",
+    "db:seed": "tsx src/server/database/seed.ts"
+  },
+  "prisma": {
+    "seed": "tsx src/server/database/seed.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

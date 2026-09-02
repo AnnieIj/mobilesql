@@ -53,7 +53,7 @@ Custom metric dashboards, query-to-chart rendering (Area, Bar, Line, Pie), visua
 |---|---|
 | **Frontend** | React 19, TypeScript 5.8, Tailwind CSS v4, Monaco Editor (`@monaco-editor/react`), Zustand 5, TanStack React Query 5, Motion |
 | **Backend** | Node.js 22 LTS, Express 4, esbuild, Zod validation |
-| **Database & ORM** | Prisma ORM 7.9, PostgreSQL 16 (optional), SQLite WASM In-Memory Fallback |
+| **Database & ORM** | Prisma ORM 7.9, PostgreSQL 16 (optional), Resilient In-Memory Fallback |
 | **AI Integration** | Google GenAI SDK (`@google/genai` with Gemini models) |
 | **Testing & Quality** | Vitest 4, Happy-DOM, TypeScript Compiler (`tsc`), Prisma CLI |
 | **DevOps & Containers** | Docker (multi-stage `node:22-alpine`), Docker Compose, GitHub Actions CI/CD |
