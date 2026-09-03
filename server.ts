@@ -130,10 +130,19 @@ Format response in JSON with:
     }
   });
 
-  // 5. Global Error Handling Middleware
+  // 5. 404 Handler for Unmatched API Routes
+  app.all('/api/*', (req, res) => {
+    res.status(404).json({
+      success: false,
+      error: `API endpoint ${req.method} ${req.originalUrl} not found.`,
+      timestamp: new Date().toISOString(),
+    });
+  });
+
+  // 6. Global Error Handling Middleware
   app.use(errorHandler);
 
-  // 6. Vite Dev Server Integration vs Production Static File Serving
+  // 7. Vite Dev Server Integration vs Production Static File Serving
   if (process.env.NODE_ENV !== 'production') {
     const { createServer: createViteServer } = await import('vite');
     const isHmrDisabled = process.env.DISABLE_HMR === 'true';

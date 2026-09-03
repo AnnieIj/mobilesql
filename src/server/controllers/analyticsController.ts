@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express';
 import { analyticsService } from '../services/analyticsService';
 import { ApiResponseBuilder } from '../utils/apiResponse';
 import { AuthenticatedRequest } from '../middlewares/auth';
+import { NotFoundError } from '../utils/errors';
 
 export class AnalyticsController {
   static async getDashboards(req: AuthenticatedRequest, res: Response, next: NextFunction) {
@@ -18,6 +19,9 @@ export class AnalyticsController {
     try {
       const { id } = req.params;
       const dashboard = await analyticsService.getDashboardById(id);
+      if (!dashboard) {
+        throw new NotFoundError(`Dashboard with ID '${id}' not found.`);
+      }
       return ApiResponseBuilder.success(res, dashboard, 'Dashboard details fetched.');
     } catch (error) {
       next(error);

@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express';
 import { datasetService } from '../services/datasetService';
 import { ApiResponseBuilder } from '../utils/apiResponse';
 import { AuthenticatedRequest } from '../middlewares/auth';
+import { NotFoundError } from '../utils/errors';
 
 export class DatasetController {
   static async getDatasets(req: AuthenticatedRequest, res: Response, next: NextFunction) {
@@ -18,6 +19,9 @@ export class DatasetController {
     try {
       const { id } = req.params;
       const dataset = await datasetService.getDatasetById(id);
+      if (!dataset) {
+        throw new NotFoundError(`Dataset with ID '${id}' not found.`);
+      }
       return ApiResponseBuilder.success(res, dataset, 'Dataset details fetched.');
     } catch (error) {
       next(error);

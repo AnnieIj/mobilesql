@@ -12,16 +12,24 @@ import {
 import { User, AuthTokens, JWTPayload, OAuthProvider } from '../types/auth.types';
 
 export interface RequestMetadata {
-  ipAddress: string;
-  userAgent: string;
+  ipAddress?: string;
+  userAgent?: string;
 }
 
 export class AuthService {
+  private normalizeMeta(meta?: RequestMetadata): { ipAddress: string; userAgent: string } {
+    return {
+      ipAddress: meta?.ipAddress || '127.0.0.1',
+      userAgent: meta?.userAgent || 'Unknown Agent',
+    };
+  }
+
   // --- USER REGISTRATION ---
   async register(
     data: { email: string; password: string; name: string; username: string; role?: any },
-    meta: RequestMetadata
+    meta?: RequestMetadata
   ): Promise<{ user: Omit<User, 'passwordHash'>; tokens: AuthTokens; verificationToken: string }> {
+    const reqMeta = this.normalizeMeta(meta);
     const existingEmail = await userRepository.findByEmail(data.email);
     if (existingEmail) {
       throw new ConflictError('A user account with this email address already exists.');
@@ -58,14 +66,14 @@ export class AuthService {
     await authRepository.createEmailVerificationToken(user.id, verifyTokenString);
 
     // Issue JWT Token Family
-    const tokens = await this.issueTokenFamily(user, meta);
+    const tokens = await this.issueTokenFamily(user, reqMeta);
 
     // Audit Log
     await authRepository.logSecurityEvent({
       userId: user.id,
       action: 'USER_REGISTERED',
-      ipAddress: meta.ipAddress,
-      userAgent: meta.userAgent,
+      ipAddress: reqMeta.ipAddress,
+      userAgent: reqMeta.userAgent,
       details: { email: user.email, role: user.role },
     });
 
@@ -76,8 +84,9 @@ export class AuthService {
   // --- EMAIL LOGIN WITH ACCOUNT LOCKOUT ---
   async login(
     data: { email: string; password: string },
-    meta: RequestMetadata
+    meta?: RequestMetadata
   ): Promise<{ user: Omit<User, 'passwordHash'>; tokens: AuthTokens }> {
+    const reqMeta = this.normalizeMeta(meta);
     const user = await userRepository.findByEmail(data.email);
     if (!user) {
       // Mitigate timing attacks
@@ -93,8 +102,8 @@ export class AuthService {
         await authRepository.logSecurityEvent({
           userId: user.id,
           action: 'USER_LOGIN_FAILED',
-          ipAddress: meta.ipAddress,
-          userAgent: meta.userAgent,
+          ipAddress: reqMeta.ipAddress,
+          userAgent: reqMeta.userAgent,
           details: { reason: 'ACCOUNT_LOCKED_ATTEMPT', remainingMinutes },
         });
         throw new ForbiddenError(
@@ -113,8 +122,8 @@ export class AuthService {
       await authRepository.logSecurityEvent({
         userId: user.id,
         action: isLocked ? 'ACCOUNT_LOCKED' : 'USER_LOGIN_FAILED',
-        ipAddress: meta.ipAddress,
-        userAgent: meta.userAgent,
+        ipAddress: reqMeta.ipAddress,
+        userAgent: reqMeta.userAgent,
         details: { failedAttempts: attempts, lockoutUntil },
       });
 
@@ -131,14 +140,14 @@ export class AuthService {
     await userRepository.resetFailedLoginAttempts(user.id);
     await userRepository.update(user.id, { lastActiveDate: new Date().toISOString() });
 
-    const tokens = await this.issueTokenFamily(user, meta);
-    await authRepository.createSession(user.id, meta.ipAddress, meta.userAgent);
+    const tokens = await this.issueTokenFamily(user, reqMeta);
+    await authRepository.createSession(user.id, reqMeta.ipAddress, reqMeta.userAgent);
 
     await authRepository.logSecurityEvent({
       userId: user.id,
       action: 'USER_LOGIN_SUCCESS',
-      ipAddress: meta.ipAddress,
-      userAgent: meta.userAgent,
+      ipAddress: reqMeta.ipAddress,
+      userAgent: reqMeta.userAgent,
     });
 
     const { passwordHash: _, ...userWithoutPassword } = user;
@@ -148,8 +157,9 @@ export class AuthService {
   // --- GUEST LOGIN ---
   async guestLogin(
     displayName: string = 'Guest Engineer',
-    meta: RequestMetadata
+    meta?: RequestMetadata
   ): Promise<{ user: Omit<User, 'passwordHash'>; tokens: AuthTokens }> {
+    const reqMeta = this.normalizeMeta(meta);
     const randomSuffix = Math.random().toString(36).substring(2, 7);
     const guestUser = await userRepository.create({
       email: `guest_${randomSuffix}@mobilesql.internal`,
@@ -170,13 +180,13 @@ export class AuthService {
       },
     });
 
-    const tokens = await this.issueTokenFamily(guestUser, meta);
+    const tokens = await this.issueTokenFamily(guestUser, reqMeta);
 
     await authRepository.logSecurityEvent({
       userId: guestUser.id,
       action: 'USER_LOGIN_SUCCESS',
-      ipAddress: meta.ipAddress,
-      userAgent: meta.userAgent,
+      ipAddress: reqMeta.ipAddress,
+      userAgent: reqMeta.userAgent,
       details: { isGuest: true },
     });
 
@@ -187,8 +197,9 @@ export class AuthService {
   // --- OAUTH LOGIN (GOOGLE, GITHUB, MICROSOFT) ---
   async oauthLogin(
     data: { provider: OAuthProvider; providerUserId: string; email: string; name: string; avatarUrl?: string },
-    meta: RequestMetadata
+    meta?: RequestMetadata
   ): Promise<{ user: Omit<User, 'passwordHash'>; tokens: AuthTokens }> {
+    const reqMeta = this.normalizeMeta(meta);
     let oauthAcc = await authRepository.findOAuthAccount(data.provider, data.providerUserId);
     let user: User | null = null;
 
@@ -228,13 +239,13 @@ export class AuthService {
       await authRepository.createOAuthAccount(user.id, data.provider, data.providerUserId, data.email);
     }
 
-    const tokens = await this.issueTokenFamily(user, meta);
+    const tokens = await this.issueTokenFamily(user, reqMeta);
 
     await authRepository.logSecurityEvent({
       userId: user.id,
       action: 'OAUTH_LOGIN_SUCCESS',
-      ipAddress: meta.ipAddress,
-      userAgent: meta.userAgent,
+      ipAddress: reqMeta.ipAddress,
+      userAgent: reqMeta.userAgent,
       details: { provider: data.provider },
     });
 
@@ -243,7 +254,8 @@ export class AuthService {
   }
 
   // --- REFRESH TOKEN ROTATION WITH REUSE DETECTION ---
-  async refreshToken(refreshTokenStr: string, meta: RequestMetadata): Promise<AuthTokens> {
+  async refreshToken(refreshTokenStr: string, meta?: RequestMetadata): Promise<AuthTokens> {
+    const reqMeta = this.normalizeMeta(meta);
     const tokenHash = crypto.createHash('sha256').update(refreshTokenStr).digest('hex');
     const existingRt = await authRepository.findRefreshTokenByHash(tokenHash);
 
@@ -258,8 +270,8 @@ export class AuthService {
       await authRepository.logSecurityEvent({
         userId: existingRt.userId,
         action: 'TOKEN_REVOKED',
-        ipAddress: meta.ipAddress,
-        userAgent: meta.userAgent,
+        ipAddress: reqMeta.ipAddress,
+        userAgent: reqMeta.userAgent,
         details: { reason: 'REFRESH_TOKEN_REUSE_DETECTED', familyId: existingRt.familyId },
       });
       throw new UnauthorizedError('Security breach warning: Reused refresh token detected. Session terminated.');
@@ -278,20 +290,21 @@ export class AuthService {
     }
 
     // Issue new pair in SAME family
-    const tokens = await this.issueTokenFamily(user, meta, existingRt.familyId);
+    const tokens = await this.issueTokenFamily(user, reqMeta, existingRt.familyId);
 
     await authRepository.logSecurityEvent({
       userId: user.id,
       action: 'TOKEN_REFRESHED',
-      ipAddress: meta.ipAddress,
-      userAgent: meta.userAgent,
+      ipAddress: reqMeta.ipAddress,
+      userAgent: reqMeta.userAgent,
     });
 
     return tokens;
   }
 
   // --- LOGOUT ---
-  async logout(refreshTokenStr: string, userId: string, meta: RequestMetadata): Promise<void> {
+  async logout(refreshTokenStr: string, userId: string, meta?: RequestMetadata): Promise<void> {
+    const reqMeta = this.normalizeMeta(meta);
     if (refreshTokenStr) {
       const tokenHash = crypto.createHash('sha256').update(refreshTokenStr).digest('hex');
       const rt = await authRepository.findRefreshTokenByHash(tokenHash);
@@ -305,14 +318,15 @@ export class AuthService {
     await authRepository.logSecurityEvent({
       userId,
       action: 'TOKEN_REVOKED',
-      ipAddress: meta.ipAddress,
-      userAgent: meta.userAgent,
+      ipAddress: reqMeta.ipAddress,
+      userAgent: reqMeta.userAgent,
       details: { reason: 'USER_LOGOUT' },
     });
   }
 
   // --- FORGOT PASSWORD ---
-  async forgotPassword(email: string, meta: RequestMetadata): Promise<{ resetToken: string }> {
+  async forgotPassword(email: string, meta?: RequestMetadata): Promise<{ resetToken: string }> {
+    const reqMeta = this.normalizeMeta(meta);
     const user = await userRepository.findByEmail(email);
     if (!user) {
       // Don't leak existence of email
@@ -325,15 +339,16 @@ export class AuthService {
     await authRepository.logSecurityEvent({
       userId: user.id,
       action: 'PASSWORD_RESET_REQUESTED',
-      ipAddress: meta.ipAddress,
-      userAgent: meta.userAgent,
+      ipAddress: reqMeta.ipAddress,
+      userAgent: reqMeta.userAgent,
     });
 
     return { resetToken: token };
   }
 
   // --- RESET PASSWORD ---
-  async resetPassword(token: string, newPasswordStr: string, meta: RequestMetadata): Promise<void> {
+  async resetPassword(token: string, newPasswordStr: string, meta?: RequestMetadata): Promise<void> {
+    const reqMeta = this.normalizeMeta(meta);
     const prt = await authRepository.findPasswordResetToken(token);
     if (!prt || prt.isUsed || new Date(prt.expiresAt).getTime() < Date.now()) {
       throw new BadRequestError('Invalid or expired password reset token.');
@@ -356,13 +371,14 @@ export class AuthService {
     await authRepository.logSecurityEvent({
       userId: user.id,
       action: 'PASSWORD_RESET_COMPLETED',
-      ipAddress: meta.ipAddress,
-      userAgent: meta.userAgent,
+      ipAddress: reqMeta.ipAddress,
+      userAgent: reqMeta.userAgent,
     });
   }
 
   // --- VERIFY EMAIL ---
-  async verifyEmail(token: string, meta: RequestMetadata): Promise<void> {
+  async verifyEmail(token: string, meta?: RequestMetadata): Promise<void> {
+    const reqMeta = this.normalizeMeta(meta);
     const evt = await authRepository.findEmailVerificationToken(token);
     if (!evt || new Date(evt.expiresAt).getTime() < Date.now()) {
       throw new BadRequestError('Invalid or expired email verification token.');
@@ -374,8 +390,8 @@ export class AuthService {
     await authRepository.logSecurityEvent({
       userId: evt.userId,
       action: 'EMAIL_VERIFIED',
-      ipAddress: meta.ipAddress,
-      userAgent: meta.userAgent,
+      ipAddress: reqMeta.ipAddress,
+      userAgent: reqMeta.userAgent,
     });
   }
 
@@ -384,8 +400,9 @@ export class AuthService {
     userId: string,
     currentPasswordStr: string,
     newPasswordStr: string,
-    meta: RequestMetadata
+    meta?: RequestMetadata
   ): Promise<void> {
+    const reqMeta = this.normalizeMeta(meta);
     const user = await userRepository.findById(userId);
     if (!user) {
       throw new NotFoundError('User not found.');
@@ -405,8 +422,8 @@ export class AuthService {
     await authRepository.logSecurityEvent({
       userId,
       action: 'PASSWORD_CHANGED',
-      ipAddress: meta.ipAddress,
-      userAgent: meta.userAgent,
+      ipAddress: reqMeta.ipAddress,
+      userAgent: reqMeta.userAgent,
     });
   }
 
@@ -415,8 +432,9 @@ export class AuthService {
     userId: string,
     currentPasswordStr: string,
     newEmail: string,
-    meta: RequestMetadata
+    meta?: RequestMetadata
   ): Promise<{ verificationToken: string }> {
+    const reqMeta = this.normalizeMeta(meta);
     const user = await userRepository.findById(userId);
     if (!user) {
       throw new NotFoundError('User not found.');
@@ -440,8 +458,8 @@ export class AuthService {
     await authRepository.logSecurityEvent({
       userId,
       action: 'EMAIL_CHANGED',
-      ipAddress: meta.ipAddress,
-      userAgent: meta.userAgent,
+      ipAddress: reqMeta.ipAddress,
+      userAgent: reqMeta.userAgent,
       details: { newEmail },
     });
 
@@ -461,7 +479,7 @@ export class AuthService {
   // --- PRIVATE TOKEN ISSUANCE HELPER ---
   private async issueTokenFamily(
     user: User,
-    meta: RequestMetadata,
+    meta: { ipAddress: string; userAgent: string },
     familyId?: string
   ): Promise<AuthTokens> {
     const payload: JWTPayload = {
