@@ -14,6 +14,7 @@ import {
   AlertCircle,
   Trash2,
   FileCode,
+  Save,
 } from 'lucide-react';
 import type { SQLDialect } from '../../types';
 import { usePlaygroundStore } from '../../stores/usePlaygroundStore';
@@ -48,11 +49,14 @@ export const EditorToolbar: React.FC<ToolbarProps> = ({
     tabs,
     activeTabId,
     updateTabContent,
+    saveCurrentQuery,
     setTabDialect,
     setTabDatabase,
     fontSize,
     setFontSize,
   } = usePlaygroundStore();
+
+  const [isSavedRecently, setIsSavedRecently] = useState(false);
 
   const activeTab = tabs.find((t) => t.id === activeTabId);
   const currentDialect = activeTab?.dialect || 'PostgreSQL';
@@ -124,6 +128,14 @@ export const EditorToolbar: React.FC<ToolbarProps> = ({
     }
   };
 
+  const handleSave = () => {
+    if (!activeTab || !activeTab.sql.trim()) return;
+    const defaultTitle = activeTab.title.replace(/\.sql$/i, '') || 'Saved Query';
+    saveCurrentQuery(defaultTitle);
+    setIsSavedRecently(true);
+    setTimeout(() => setIsSavedRecently(false), 2000);
+  };
+
   return (
     <div className="bg-[#1B1B1E] border-b border-[#2D2D31] px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-xs font-mono select-none">
       {/* Left: Action Triggers */}
@@ -157,6 +169,23 @@ export const EditorToolbar: React.FC<ToolbarProps> = ({
           title="Auto-Format SQL (Ctrl+Shift+F)"
         >
           Format
+        </Button>
+
+        <Button
+          size="sm"
+          variant="outline"
+          leftIcon={
+            isSavedRecently ? (
+              <CheckCircle2 className="w-3.5 h-3.5 text-[#62DF7D]" />
+            ) : (
+              <Save className="w-3.5 h-3.5 text-[#3B82F6]" />
+            )
+          }
+          onClick={handleSave}
+          title="Save Query to Workspace"
+          className={isSavedRecently ? 'border-[#62DF7D]/60 text-[#62DF7D]' : ''}
+        >
+          {isSavedRecently ? 'Saved!' : 'Save'}
         </Button>
 
         <div className="h-4 w-[1px] bg-[#2D2D31] mx-1 hidden sm:block" />

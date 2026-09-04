@@ -18,6 +18,20 @@ export interface ExecutionPlanNode {
 
 const clientDatabases = new Map<string, any>();
 
+const SQL_DATA_TYPES = new Set([
+  'INT', 'INTEGER', 'FLOAT', 'DOUBLE', 'DECIMAL', 'NUMERIC', 'VARCHAR',
+  'CHAR', 'STRING', 'TEXT', 'DATE', 'DATETIME', 'TIMESTAMP', 'BOOLEAN', 'BOOL', 'JSON', 'BLOB',
+]);
+
+function prepareClientQueryForAlasql(sql: string): string {
+  return sql.replace(/\bAS\s+([a-zA-Z_][a-zA-Z0-9_]*)\b/gi, (match, p1) => {
+    if (SQL_DATA_TYPES.has(p1.toUpperCase())) {
+      return match;
+    }
+    return `AS \`${p1}\``;
+  });
+}
+
 function getClientPracticeDatabase(databaseId: string = 'ecommerce_prod'): any {
   if (clientDatabases.has(databaseId)) {
     return clientDatabases.get(databaseId);
@@ -138,7 +152,7 @@ export const executePlaygroundQuery = async (
   // 2. Client-side Sandbox fallback for local practice datasets
   try {
     const clientDb = getClientPracticeDatabase(databaseId);
-    const rawResult = clientDb.exec(trimmed);
+    const rawResult = clientDb.exec(prepareClientQueryForAlasql(trimmed));
     const execTime = Math.max(1, Math.round(performance.now() - startTime));
     const rows = Array.isArray(rawResult) ? rawResult : [];
     const columns = rows.length > 0 ? Object.keys(rows[0]) : [];

@@ -236,6 +236,61 @@ describe('Server SQL Engine & Safety Suite', () => {
     expect(result.errorMessage).toContain('Parse error');
   });
 
+  it('executes GROUP BY query with unquoted AS total alias', async () => {
+    const result = await sqlExecutionService.execute({
+      query: 'SELECT country, COUNT(*) AS total FROM customers GROUP BY country;',
+      dialect: 'PostgreSQL',
+      databaseId: 'ecommerce_prod',
+      readOnly: true,
+      limit: 100,
+      timeoutMs: 5000,
+    });
+
+    expect(result.status).toBe('success');
+    expect(result.rowCount).toBe(5);
+    expect(result.rows[0]).toHaveProperty('country');
+    expect(result.rows[0]).toHaveProperty('total');
+  });
+
+  it('executes aggregate join query with revenue calculation and status filter', async () => {
+    const result = await sqlExecutionService.execute({
+      query: `SELECT
+          c.country,
+          COUNT(o.id) AS total_orders,
+          SUM(o.total_amount) AS revenue
+      FROM customers c
+      JOIN orders o ON c.id = o.customer_id
+      WHERE o.status = 'completed'
+      GROUP BY c.country
+      ORDER BY revenue DESC;`,
+      dialect: 'PostgreSQL',
+      databaseId: 'ecommerce_prod',
+      readOnly: true,
+      limit: 100,
+      timeoutMs: 5000,
+    });
+
+    expect(result.status).toBe('success');
+    expect(result.rowCount).toBe(3);
+    expect(result.rows[0].country).toBe('Japan');
+    expect(result.rows[0].revenue).toBe(3420);
+  });
+
+  it('executes analytical query with DENSE_RANK() window function', async () => {
+    const result = await sqlExecutionService.execute({
+      query: 'SELECT id, customer_id, total_amount, DENSE_RANK() OVER (ORDER BY total_amount DESC) as rank FROM orders LIMIT 5;',
+      dialect: 'PostgreSQL',
+      databaseId: 'ecommerce_prod',
+      readOnly: true,
+      limit: 100,
+      timeoutMs: 5000,
+    });
+
+    expect(result.status).toBe('success');
+    expect(result.rowCount).toBe(5);
+    expect(result.rows[0].rank).toBe(1);
+  });
+
   it('reports truthful engine readiness and active backend', async () => {
     const status = await sqlExecutionService.getEngineStatus('ecommerce_prod');
     expect(status.ready).toBe(true);

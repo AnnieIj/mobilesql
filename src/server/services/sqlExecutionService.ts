@@ -253,7 +253,7 @@ export class SqlExecutionService {
         }
 
         const practiceDb = this.getPracticeDatabase(input.databaseId || 'ecommerce_prod');
-        const queryRes = practiceDb.exec(cleanQuery);
+        const queryRes = practiceDb.exec(this.prepareQueryForAlasql(cleanQuery));
 
         if (isSelect) {
           rows = Array.isArray(queryRes) ? queryRes : [];
@@ -577,6 +577,20 @@ export class SqlExecutionService {
   }
 
   // --- Private Helper Methods ---
+
+  private static readonly SQL_TYPES = new Set([
+    'INT', 'INTEGER', 'FLOAT', 'DOUBLE', 'DECIMAL', 'NUMERIC', 'VARCHAR',
+    'CHAR', 'STRING', 'TEXT', 'DATE', 'DATETIME', 'TIMESTAMP', 'BOOLEAN', 'BOOL', 'JSON', 'BLOB',
+  ]);
+
+  private prepareQueryForAlasql(sql: string): string {
+    return sql.replace(/\bAS\s+([a-zA-Z_][a-zA-Z0-9_]*)\b/gi, (match, p1) => {
+      if (SqlExecutionService.SQL_TYPES.has(p1.toUpperCase())) {
+        return match;
+      }
+      return `AS \`${p1}\``;
+    });
+  }
 
   private assertQuerySafety(sql: string): void {
     const normalized = sql.toUpperCase();
