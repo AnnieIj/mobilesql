@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Play,
   Square,
@@ -11,12 +11,14 @@ import {
   ZoomOut,
   Database,
   CheckCircle2,
+  AlertCircle,
   Trash2,
   FileCode,
 } from 'lucide-react';
 import type { SQLDialect } from '../../types';
 import { usePlaygroundStore } from '../../stores/usePlaygroundStore';
 import { PRACTICE_DATABASES } from '../../data/playgroundDatabases';
+import { apiClient } from '../../services/apiClient';
 import { Button } from '../ui/Button';
 
 interface ToolbarProps {
@@ -55,6 +57,49 @@ export const EditorToolbar: React.FC<ToolbarProps> = ({
   const activeTab = tabs.find((t) => t.id === activeTabId);
   const currentDialect = activeTab?.dialect || 'PostgreSQL';
   const currentDbId = activeTab?.databaseId || 'ecommerce_prod';
+
+  const [engineStatus, setEngineStatus] = useState<{
+    ready: boolean;
+    backend: string;
+    label: string;
+  }>({
+    ready: true,
+    backend: 'in-memory',
+    label: 'Engine Ready (In-Memory Sandbox)',
+  });
+  const [isCheckingEngine, setIsCheckingEngine] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    const checkEngine = async () => {
+      try {
+        setIsCheckingEngine(true);
+        const status = await apiClient.sql.status(currentDbId);
+        if (isMounted && status) {
+          setEngineStatus({
+            ready: status.ready,
+            backend: status.backend,
+            label: status.label || (status.backend === 'postgresql' ? 'Engine Ready (PostgreSQL)' : 'Engine Ready (In-Memory Sandbox)'),
+          });
+        }
+      } catch {
+        if (isMounted) {
+          setEngineStatus({
+            ready: true,
+            backend: 'in-memory',
+            label: 'Engine Ready (In-Memory Sandbox)',
+          });
+        }
+      } finally {
+        if (isMounted) setIsCheckingEngine(false);
+      }
+    };
+
+    checkEngine();
+    return () => {
+      isMounted = false;
+    };
+  }, [currentDbId]);
 
   const handleCopy = () => {
     if (activeTab?.sql) {
@@ -202,9 +247,22 @@ export const EditorToolbar: React.FC<ToolbarProps> = ({
           <Trash2 className="w-3.5 h-3.5" />
         </button>
 
-        <span className="hidden xl:flex items-center gap-1 text-[10px] text-[#62DF7D] bg-[#62DF7D]/10 px-2 py-0.5 rounded border border-[#62DF7D]/30">
-          <CheckCircle2 className="w-3 h-3" />
-          Engine Ready
+        <span
+          className={`hidden xl:flex items-center gap-1 text-[10px] px-2 py-0.5 rounded border ${
+            engineStatus.ready
+              ? 'text-[#62DF7D] bg-[#62DF7D]/10 border-[#62DF7D]/30'
+              : 'text-[#EF4444] bg-[#EF4444]/10 border-[#EF4444]/30'
+          }`}
+          title={`Active backend: ${engineStatus.backend}. Dialect: ${currentDialect}.`}
+        >
+          {isCheckingEngine ? (
+            <RotateCcw className="w-3 h-3 animate-spin text-[#8A8A90]" />
+          ) : engineStatus.ready ? (
+            <CheckCircle2 className="w-3 h-3 text-[#62DF7D]" />
+          ) : (
+            <AlertCircle className="w-3 h-3 text-[#EF4444]" />
+          )}
+          {engineStatus.label}
         </span>
       </div>
     </div>

@@ -140,6 +140,7 @@ class ApiClient {
 
   // --- SQL Execution Engine ---
   readonly sql = {
+    status: (databaseId?: string) => this.get<any>('/sql/status', { databaseId }),
     execute: (input: ExecuteSqlInput) => this.post<any>('/sql/execute', input),
     explain: (input: ExplainSqlInput) => this.post<any>('/sql/explain', input),
     format: (input: FormatSqlInput) => this.post<{ formattedSql: string }>('/sql/format', input),

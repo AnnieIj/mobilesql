@@ -25,6 +25,7 @@ export const PRACTICE_DATABASES: PracticeDatabase[] = [
         rowCount: 1250,
         columns: [
           { name: 'id', type: 'UUID', isPrimaryKey: true },
+          { name: 'name', type: 'VARCHAR(100)' },
           { name: 'first_name', type: 'VARCHAR(50)' },
           { name: 'last_name', type: 'VARCHAR(50)' },
           { name: 'email', type: 'VARCHAR(100)' },
@@ -71,11 +72,11 @@ export const PRACTICE_DATABASES: PracticeDatabase[] = [
     ],
     data: {
       customers: [
-        { id: 'usr-101', first_name: 'Elena', last_name: 'Rostova', email: 'elena@techcorp.io', country: 'Germany', tier: 'VIP', created_at: '2025-01-15 08:30:00' },
-        { id: 'usr-102', first_name: 'Marcus', last_name: 'Vance', email: 'mvance@data.net', country: 'United States', tier: 'Standard', created_at: '2025-02-01 11:15:00' },
-        { id: 'usr-103', first_name: 'Aisha', last_name: 'Khan', email: 'aisha@cloud.co', country: 'United Kingdom', tier: 'VIP', created_at: '2025-02-10 14:22:00' },
-        { id: 'usr-104', first_name: 'Kenji', last_name: 'Sato', email: 'kenji@tokyo.jp', country: 'Japan', tier: 'Enterprise', created_at: '2025-03-05 09:10:00' },
-        { id: 'usr-105', first_name: 'David', last_name: 'Kim', email: 'dkim@seoul.kr', country: 'South Korea', tier: 'Standard', created_at: '2025-03-12 16:45:00' },
+        { id: 'usr-101', name: 'Elena Rostova', first_name: 'Elena', last_name: 'Rostova', email: 'elena@techcorp.io', country: 'Germany', tier: 'VIP', created_at: '2025-01-15 08:30:00' },
+        { id: 'usr-102', name: 'Marcus Vance', first_name: 'Marcus', last_name: 'Vance', email: 'mvance@data.net', country: 'United States', tier: 'Standard', created_at: '2025-02-01 11:15:00' },
+        { id: 'usr-103', name: 'Aisha Khan', first_name: 'Aisha', last_name: 'Khan', email: 'aisha@cloud.co', country: 'United Kingdom', tier: 'VIP', created_at: '2025-02-10 14:22:00' },
+        { id: 'usr-104', name: 'Kenji Sato', first_name: 'Kenji', last_name: 'Sato', email: 'kenji@tokyo.jp', country: 'Japan', tier: 'Enterprise', created_at: '2025-03-05 09:10:00' },
+        { id: 'usr-105', name: 'David Kim', first_name: 'David', last_name: 'Kim', email: 'dkim@seoul.kr', country: 'South Korea', tier: 'Standard', created_at: '2025-03-12 16:45:00' },
       ],
       orders: [
         { id: 9001, customer_id: 'usr-101', status: 'completed', total_amount: 1450.00, shipping_fee: 15.00, created_at: '2026-08-01 10:12:00' },
@@ -136,11 +137,11 @@ export const PRACTICE_DATABASES: PracticeDatabase[] = [
     ],
     data: {
       employees: [
-        { id: 101, name: 'Sarah Chen', role: 'VP of Engineering', dept_id: 1, manager_id: null, salary: 240000.00, hire_date: '2020-03-15' },
-        { id: 102, name: 'Alex Quan', role: 'Staff Database Architect', dept_id: 1, manager_id: 101, salary: 185000.00, hire_date: '2021-06-01' },
-        { id: 103, name: 'David Miller', role: 'Senior Backend Engineer', dept_id: 1, manager_id: 102, salary: 155000.00, hire_date: '2022-01-10' },
-        { id: 104, name: 'Maria Santos', role: 'Lead Data Scientist', dept_id: 2, manager_id: 101, salary: 170000.00, hire_date: '2021-11-20' },
-        { id: 105, name: 'James Wilson', role: 'HR Operations Director', dept_id: 3, manager_id: null, salary: 140000.00, hire_date: '2019-08-12' },
+        { id: 101, name: 'Sarah Chen', role: 'VP of Engineering', dept_id: 1, department_id: 1, manager_id: null, salary: 240000.00, is_active: true, hire_date: '2020-03-15' },
+        { id: 102, name: 'Alex Quan', role: 'Staff Database Architect', dept_id: 1, department_id: 1, manager_id: 101, salary: 185000.00, is_active: true, hire_date: '2021-06-01' },
+        { id: 103, name: 'David Miller', role: 'Senior Backend Engineer', dept_id: 1, department_id: 1, manager_id: 102, salary: 155000.00, is_active: true, hire_date: '2022-01-10' },
+        { id: 104, name: 'Maria Santos', role: 'Lead Data Scientist', dept_id: 2, department_id: 2, manager_id: 101, salary: 170000.00, is_active: true, hire_date: '2021-11-20' },
+        { id: 105, name: 'James Wilson', role: 'HR Operations Director', dept_id: 3, department_id: 3, manager_id: null, salary: 140000.00, is_active: true, hire_date: '2019-08-12' },
       ],
       departments: [
         { id: 1, name: 'Engineering', budget: 5000000.00, location: 'San Francisco' },
@@ -435,11 +436,30 @@ export const PRACTICE_DATABASES: PracticeDatabase[] = [
           { name: 'stage', type: 'VARCHAR(30)' },
         ],
       },
+      {
+        name: 'subscriptions',
+        rowCount: 3200,
+        columns: [
+          { name: 'id', type: 'INT', isPrimaryKey: true },
+          { name: 'plan_name', type: 'VARCHAR(50)' },
+          { name: 'start_date', type: 'DATE' },
+          { name: 'mrr_amount', type: 'DECIMAL(10,2)' },
+          { name: 'status', type: 'VARCHAR(20)' },
+        ],
+      },
     ],
     data: {
       deals: [
         { deal_id: 'deal-001', company_name: 'Acme Global AI', arr_value: 120000.00, stage: 'Negotiation' },
         { deal_id: 'deal-002', company_name: 'Starlight Media', arr_value: 48000.00, stage: 'Closed Won' },
+      ],
+      subscriptions: [
+        { id: 1, plan_name: 'Enterprise Scale', start_date: '2024-01-05', mrr_amount: 5000.00, status: 'active' },
+        { id: 2, plan_name: 'Growth Plan', start_date: '2024-01-12', mrr_amount: 1500.00, status: 'cancelled' },
+        { id: 3, plan_name: 'Enterprise Scale', start_date: '2024-02-01', mrr_amount: 7500.00, status: 'active' },
+        { id: 4, plan_name: 'Starter Plan', start_date: '2024-02-18', mrr_amount: 500.00, status: 'active' },
+        { id: 5, plan_name: 'Growth Plan', start_date: '2024-03-02', mrr_amount: 2500.00, status: 'active' },
+        { id: 6, plan_name: 'Starter Plan', start_date: '2024-03-20', mrr_amount: 500.00, status: 'cancelled' },
       ],
     },
   },

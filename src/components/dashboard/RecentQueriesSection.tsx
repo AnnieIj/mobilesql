@@ -6,9 +6,22 @@ import { SectionTitle } from '../layout/Headers';
 import { SQLCodeBlock } from '../shared/TerminalComponents';
 import { MOCK_RECENT_QUERIES } from '../../data/dashboardData';
 import { useUIStore } from '../../stores/useUIStore';
+import { usePlaygroundStore } from '../../stores/usePlaygroundStore';
 
 export const RecentQueriesSection: React.FC = () => {
   const { setActiveTab, addToast } = useUIStore();
+  const { executionHistory, createNewTab } = usePlaygroundStore();
+
+  const queries = executionHistory.length > 0
+    ? executionHistory.slice(0, 3).map((item, idx) => ({
+        id: `real_${idx}`,
+        sql: item.query,
+        database: item.dialect || 'PostgreSQL',
+        executionTimeMs: item.executionTimeMs,
+        executedAt: new Date(item.executedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        status: item.error ? 'error' : 'success',
+      }))
+    : MOCK_RECENT_QUERIES;
 
   return (
     <div className="space-y-4 font-sans">
@@ -24,7 +37,7 @@ export const RecentQueriesSection: React.FC = () => {
       />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {MOCK_RECENT_QUERIES.map((q) => (
+        {queries.map((q) => (
           <Card
             key={q.id}
             className="bg-[#1B1B1E] border border-[#2D2D31] p-4 rounded-2xl flex flex-col justify-between space-y-3 font-mono"
@@ -52,11 +65,12 @@ export const RecentQueriesSection: React.FC = () => {
                 size="sm"
                 leftIcon={<Play className="w-3.5 h-3.5 text-[#62DF7D]" />}
                 onClick={() => {
+                  createNewTab('Recent Query', q.sql);
                   setActiveTab('playground');
                   addToast({
                     title: 'Query Loaded',
-                    message: `Executing in Playground: ${q.sql.slice(0, 30)}...`,
-                    type: 'xp',
+                    message: `Loaded into Playground tab: ${q.sql.slice(0, 30)}...`,
+                    type: 'info',
                   });
                 }}
               >

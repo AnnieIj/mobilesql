@@ -5,7 +5,9 @@ import {
   ValidateSqlInput,
   OptimizeSqlInput,
 } from '../schemas/sql.schema';
-import db from '../database/client';
+import alasql from 'alasql';
+import db, { isDatabaseConnected } from '../database/client';
+import { PRACTICE_DATABASES } from '../../data/playgroundDatabases';
 import { playgroundPrismaRepository } from '../database/repositories/playgroundPrismaRepository';
 import { logger } from '../utils/logger';
 import { BadRequestError, AppError } from '../utils/errors';
@@ -21,6 +23,7 @@ export interface SqlExecutionResult {
   rowCount: number;
   executionTimeMs: number;
   status: 'success' | 'error';
+  backend?: 'in-memory' | 'postgresql';
   errorMessage?: string;
   affectedRows?: number;
   statementType: string;
@@ -72,6 +75,152 @@ export interface OptimizationSuggestion {
 }
 
 export class SqlExecutionService {
+  private practiceDatabases = new Map<string, any>();
+
+  constructor() {
+    this.registerAlasqlExtensions();
+  }
+
+  private registerAlasqlExtensions() {
+    let rowCounter = 0;
+    let rankCounter = 0;
+
+    (alasql as any).fn.DENSE_RANK = function() {
+      rankCounter++;
+      return rankCounter;
+    };
+    (alasql as any).fn.dense_rank = (alasql as any).fn.DENSE_RANK;
+
+    (alasql as any).fn.ROW_NUMBER = function() {
+      rowCounter++;
+      return rowCounter;
+    };
+    (alasql as any).fn.row_number = (alasql as any).fn.ROW_NUMBER;
+
+    (alasql as any).fn.RANK = function() {
+      rankCounter++;
+      return rankCounter;
+    };
+    (alasql as any).fn.rank = (alasql as any).fn.RANK;
+
+    (alasql as any).fn.DATE_TRUNC = function(unit: string, date: any) {
+      if (!date) return null;
+      const d = new Date(date);
+      if (isNaN(d.getTime())) return String(date).slice(0, 7) + '-01';
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      return `${y}-${m}-01`;
+    };
+    (alasql as any).fn.date_trunc = (alasql as any).fn.DATE_TRUNC;
+
+    (alasql as any).fn.TO_CHAR = function(date: any, format: string) {
+      if (!date) return '';
+      const d = new Date(date);
+      if (isNaN(d.getTime())) return String(date).slice(0, 7);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      return `${y}-${m}`;
+    };
+    (alasql as any).fn.to_char = (alasql as any).fn.TO_CHAR;
+
+    (alasql as any).fn.NULLIF = function(a: any, b: any) {
+      return a === b ? null : a;
+    };
+    (alasql as any).fn.nullif = (alasql as any).fn.NULLIF;
+  }
+
+  /**
+   * Initializes or retrieves an in-memory SQL database instance for a practice dataset.
+   */
+  public getPracticeDatabase(databaseId: string = 'ecommerce_prod'): any {
+    const resolvedId =
+      databaseId === 'hr_payroll' ? 'employees_corp' :
+      databaseId === 'saas_crm' ? 'sales_crm' :
+      databaseId;
+
+    if (this.practiceDatabases.has(resolvedId)) {
+      return this.practiceDatabases.get(resolvedId);
+    }
+
+    const dbInstance = new alasql.Database();
+    const dbConfig = PRACTICE_DATABASES.find((db) => db.id === resolvedId) || PRACTICE_DATABASES[0];
+
+    if (dbConfig && dbConfig.tables && dbConfig.data) {
+      for (const table of dbConfig.tables) {
+        const colDefs = table.columns.map((c) => {
+          let sqlType = 'STRING';
+          const t = c.type.toUpperCase();
+          if (t.includes('INT') || t.includes('SERIAL') || t.includes('BIGINT')) sqlType = 'INT';
+          else if (t.includes('DECIMAL') || t.includes('NUMERIC') || t.includes('FLOAT')) sqlType = 'FLOAT';
+          else if (t.includes('BOOL')) sqlType = 'BOOLEAN';
+          return `${c.name} ${sqlType}`;
+        }).join(', ');
+
+        dbInstance.exec(`CREATE TABLE ${table.name} (${colDefs});`);
+
+        const rows = (dbConfig.data as Record<string, any[]>)[table.name] || [];
+        if (rows.length > 0) {
+          for (const row of rows) {
+            const keys = Object.keys(row);
+            const cols = keys.join(', ');
+            const placeholders = keys.map(() => '?').join(', ');
+            const values = keys.map((k) => row[k]);
+            dbInstance.exec(`INSERT INTO ${table.name} (${cols}) VALUES (${placeholders});`, values);
+          }
+        }
+      }
+    }
+
+    this.practiceDatabases.set(databaseId, dbInstance);
+    return dbInstance;
+  }
+
+  /**
+   * Returns truthful engine readiness and active backend.
+   */
+  async getEngineStatus(databaseId: string = 'ecommerce_prod'): Promise<{
+    ready: boolean;
+    backend: 'in-memory' | 'postgresql';
+    status: 'ready' | 'degraded' | 'offline';
+    label: string;
+    activeDatabase: string;
+    availableDialects: string[];
+  }> {
+    const isLive = isDatabaseConnected();
+    if (isLive) {
+      return {
+        ready: true,
+        backend: 'postgresql',
+        status: 'ready',
+        label: 'Engine Ready (PostgreSQL Live)',
+        activeDatabase: databaseId,
+        availableDialects: ['PostgreSQL', 'SQLite', 'MySQL'],
+      };
+    }
+
+    try {
+      const dbInstance = this.getPracticeDatabase(databaseId);
+      dbInstance.exec('SELECT 1 AS probe;');
+      return {
+        ready: true,
+        backend: 'in-memory',
+        status: 'ready',
+        label: 'Engine Ready (In-Memory Sandbox)',
+        activeDatabase: databaseId,
+        availableDialects: ['PostgreSQL', 'SQLite', 'MySQL'],
+      };
+    } catch (err: any) {
+      return {
+        ready: false,
+        backend: 'in-memory',
+        status: 'degraded',
+        label: 'Engine Degraded',
+        activeDatabase: databaseId,
+        availableDialects: ['PostgreSQL', 'SQLite', 'MySQL'],
+      };
+    }
+  }
+
   /**
    * Executes a SQL query in a safe, sandboxed environment with strict timeouts.
    */
@@ -87,30 +236,47 @@ export class SqlExecutionService {
     this.assertQuerySafety(cleanQuery);
 
     const statementType = this.extractStatementType(cleanQuery);
+    const isPracticeDb = !input.databaseId || PRACTICE_DATABASES.some((db) => db.id === input.databaseId);
+    const usePostgres = !isPracticeDb && isDatabaseConnected();
+    const activeBackend: 'in-memory' | 'postgresql' = usePostgres ? 'postgresql' : 'in-memory';
 
     try {
-      // Execute the query safely using Prisma raw query interface with timeout protection
       let rows: any[] = [];
       let affectedRows: number | undefined;
 
       const isSelect = statementType === 'SELECT' || statementType === 'WITH' || statementType === 'EXPLAIN';
 
-      if (isSelect) {
-        // Execute SELECT query using $queryRawUnsafe
-        rows = await this.executeWithTimeout(
-          db.$queryRawUnsafe(cleanQuery),
-          input.timeoutMs
-        );
-      } else {
-        // Execute DML / DDL in a rolled-back transaction if readOnly is requested or sandboxed
-        if (input.readOnly) {
+      if (activeBackend === 'in-memory') {
+        // Enforce read-only / safety restrictions on practice sandbox
+        if (!isSelect && (input.readOnly || statementType === 'DROP' || statementType === 'TRUNCATE' || statementType === 'ALTER')) {
           throw new BadRequestError(`Cannot execute ${statementType} statement in read-only mode.`);
         }
 
-        affectedRows = await this.executeWithTimeout(
-          db.$executeRawUnsafe(cleanQuery),
-          input.timeoutMs
-        );
+        const practiceDb = this.getPracticeDatabase(input.databaseId || 'ecommerce_prod');
+        const queryRes = practiceDb.exec(cleanQuery);
+
+        if (isSelect) {
+          rows = Array.isArray(queryRes) ? queryRes : [];
+        } else {
+          affectedRows = typeof queryRes === 'number' ? queryRes : (Array.isArray(queryRes) ? queryRes.length : 1);
+        }
+      } else {
+        // Live PostgreSQL execution via Prisma
+        if (isSelect) {
+          rows = await this.executeWithTimeout(
+            db.$queryRawUnsafe(cleanQuery),
+            input.timeoutMs
+          );
+        } else {
+          if (input.readOnly) {
+            throw new BadRequestError(`Cannot execute ${statementType} statement in read-only mode.`);
+          }
+
+          affectedRows = await this.executeWithTimeout(
+            db.$executeRawUnsafe(cleanQuery),
+            input.timeoutMs
+          );
+        }
       }
 
       const executionTimeMs = Math.round(performance.now() - startTime);
@@ -142,6 +308,7 @@ export class SqlExecutionService {
         rowCount: returnedRows.length,
         executionTimeMs,
         status: 'success',
+        backend: activeBackend,
         affectedRows,
         statementType,
         metrics: {
@@ -188,6 +355,7 @@ export class SqlExecutionService {
         rowCount: 0,
         executionTimeMs,
         status: 'error',
+        backend: activeBackend,
         errorMessage: this.sanitizeErrorMessage(errorMessage),
         statementType,
         metrics: {
@@ -315,6 +483,15 @@ export class SqlExecutionService {
       errors.push('Unclosed single quote string literal detected.');
     }
 
+    // Comprehensive syntax parsing via SQL engine
+    try {
+      alasql.parse(sql);
+    } catch (parseErr: any) {
+      if (parseErr?.message && !errors.includes(parseErr.message)) {
+        errors.push(parseErr.message);
+      }
+    }
+
     // Check for missing FROM in SELECT
     const upper = sql.toUpperCase();
     if (upper.startsWith('SELECT') && !upper.includes('FROM') && !upper.includes('NOW()') && !upper.includes('VERSION()') && !upper.match(/SELECT\s+[\d\w\s+\-*\/]+;/)) {
@@ -422,7 +599,11 @@ export class SqlExecutionService {
   }
 
   private extractStatementType(sql: string): string {
-    const match = sql.trim().match(/^([a-zA-Z]+)/);
+    const cleaned = sql
+      .replace(/--.*$/gm, '')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .trim();
+    const match = cleaned.match(/^([a-zA-Z]+)/);
     return match ? match[1].toUpperCase() : 'UNKNOWN';
   }
 

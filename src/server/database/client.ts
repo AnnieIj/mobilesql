@@ -12,11 +12,23 @@ declare global {
  * Prevents application startup crashes if DATABASE_URL is not yet provisioned.
  */
 let prismaInstance: PrismaClient | null = null;
+let isConnected = false;
+
+export function isDatabaseConnected(): boolean {
+  return isConnected && prismaInstance !== null && !(prismaInstance as any).__isMockProxy;
+}
+
+export function getActiveBackendType(): 'postgresql' | 'in-memory' {
+  return isDatabaseConnected() ? 'postgresql' : 'in-memory';
+}
 
 export function getDb(): PrismaClient {
   if (!prismaInstance) {
     const isProd = process.env.NODE_ENV === 'production';
     try {
+      if (!process.env.DATABASE_URL) {
+        throw new Error('DATABASE_URL is not defined in environment');
+      }
       prismaInstance = globalThis.prismaGlobal ?? new PrismaClient({
         log: isProd
           ? [{ emit: 'event', level: 'error' }]
@@ -30,13 +42,20 @@ export function getDb(): PrismaClient {
       if (process.env.NODE_ENV !== 'production') {
         globalThis.prismaGlobal = prismaInstance;
       }
+      isConnected = true;
     } catch (err) {
       logger.warn('[Database] PrismaClient initialization deferred or failed:', err);
       // Return a safe mock proxy if client cannot initialize
-      return new Proxy({} as any, {
+      const mockClient = new Proxy({ __isMockProxy: true } as any, {
         get(_target, prop) {
+          if (prop === '__isMockProxy') return true;
           if (prop === '$disconnect' || prop === '$connect') {
             return async () => {};
+          }
+          if (prop === '$queryRawUnsafe' || prop === '$queryRaw' || prop === '$executeRawUnsafe' || prop === '$executeRaw') {
+            return async () => {
+              throw new Error('[Database] PostgreSQL connection inactive: cannot execute raw query on mock proxy. Use in-memory execution backend.');
+            };
           }
           return new Proxy({}, {
             get(_t, method) {
@@ -48,6 +67,9 @@ export function getDb(): PrismaClient {
           });
         },
       });
+      prismaInstance = mockClient;
+      isConnected = false;
+      return mockClient;
     }
   }
   return prismaInstance;

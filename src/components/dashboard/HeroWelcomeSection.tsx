@@ -74,14 +74,21 @@ export const HeroWelcomeSection: React.FC = () => {
 
           <div className="space-y-1">
             <div className="flex justify-between text-[11px] font-mono text-[#8A8A90]">
-              <span>Level 12 Progression</span>
-              <span className="text-[#62DF7D] font-bold">3,450 / 5,000 XP</span>
+              <span>Level {user?.level || 1} Progression</span>
+              <span className="text-[#62DF7D] font-bold">
+                {(user?.xp || 0).toLocaleString()} / {(user?.nextLevelXp || 1000).toLocaleString()} XP
+              </span>
             </div>
-            <ProgressBar value={69} height="md" color="emerald" showValue={false} />
+            <ProgressBar
+              value={Math.min(100, Math.round(((user?.xp || 0) / (user?.nextLevelXp || 1000)) * 100))}
+              height="md"
+              color="emerald"
+              showValue={false}
+            />
           </div>
 
           <p className="text-[10px] text-[#8A8A90] font-mono text-right">
-            +1,550 XP needed for Level 13 (Senior DB Architect)
+            +{Math.max(0, (user?.nextLevelXp || 1000) - (user?.xp || 0)).toLocaleString()} XP needed for Level {(user?.level || 1) + 1}
           </p>
         </div>
       </div>

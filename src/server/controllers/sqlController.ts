@@ -51,6 +51,16 @@ export class SqlController {
       next(error);
     }
   }
+
+  async getStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const databaseId = typeof req.query.databaseId === 'string' ? req.query.databaseId : 'ecommerce_prod';
+      const status = await sqlExecutionService.getEngineStatus(databaseId);
+      ApiResponseBuilder.success(res, status, 'SQL engine status retrieved');
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 export const sqlController = new SqlController();

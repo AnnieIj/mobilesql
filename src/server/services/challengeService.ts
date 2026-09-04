@@ -61,6 +61,7 @@ export class ChallengeService {
       {
         query: input.query,
         dialect: input.dialect as any,
+        databaseId: (challenge as any).databaseId || 'ecommerce_prod',
         timeoutMs: 5000,
         readOnly: true,
         limit: 1000,
@@ -114,15 +115,24 @@ export class ChallengeService {
         const isMatch = this.compareDatasetResults(expected, actual);
         if (!isMatch) allPassed = false;
 
+        let diffMsg: string | undefined;
+        if (!isMatch) {
+          if (Array.isArray(expected)) {
+            diffMsg = `Mismatch: Expected ${expected.length} rows, received ${actual?.length || 0} rows.`;
+          } else if (typeof expected === 'object' && expected !== null) {
+            diffMsg = `Output mismatch: Result first row does not match expected criteria.`;
+          } else {
+            diffMsg = `Query output did not match expected test case criteria.`;
+          }
+        }
+
         testResults.push({
           testCaseId: tc.id,
           description: tc.description,
           passed: isMatch,
           expectedOutput: expected,
           actualOutput: actual,
-          diffMessage: isMatch
-            ? undefined
-            : `Mismatch: Expected ${expected?.length || 0} rows, received ${actual?.length || 0} rows.`,
+          diffMessage: diffMsg,
         });
       }
     } else {
@@ -196,30 +206,42 @@ export class ChallengeService {
 
   // --- Helper Methods ---
 
-  private compareDatasetResults(expected: any[], actual: any[]): boolean {
-    if (!Array.isArray(expected) || !Array.isArray(actual)) return false;
-    if (expected.length !== actual.length) return false;
+  private compareDatasetResults(expected: any, actual: any[]): boolean {
+    if (!Array.isArray(actual) || actual.length === 0) return false;
 
-    // Check row-by-row equivalence with case-insensitive column keys
-    for (let i = 0; i < expected.length; i++) {
-      const expRow = expected[i];
-      const actRow = actual[i];
+    // Case 1: expected is an array of rows
+    if (Array.isArray(expected)) {
+      if (expected.length !== actual.length) return false;
+      for (let i = 0; i < expected.length; i++) {
+        if (!this.matchesRow(expected[i], actual[i])) return false;
+      }
+      return true;
+    }
 
-      if (!expRow || !actRow) return false;
+    // Case 2: expected is a single row object (such as expectedFirstRow)
+    if (typeof expected === 'object' && expected !== null) {
+      return this.matchesRow(expected, actual[0]);
+    }
 
-      const expKeys = Object.keys(expRow);
-      for (const key of expKeys) {
-        const normKey = key.toLowerCase();
-        // find matching key in actRow
-        const actMatchingKey = Object.keys(actRow).find((k) => k.toLowerCase() === normKey);
-        if (!actMatchingKey) return false;
+    return false;
+  }
 
-        const expVal = expRow[key];
-        const actVal = actRow[actMatchingKey];
+  private matchesRow(expectedRow: Record<string, any>, actualRow: Record<string, any>): boolean {
+    if (!expectedRow || !actualRow) return false;
 
-        if (String(expVal).trim() !== String(actVal).trim()) {
-          return false;
-        }
+    const expKeys = Object.keys(expectedRow);
+    for (const key of expKeys) {
+      const normKey = key.toLowerCase();
+      const actMatchingKey = Object.keys(actualRow).find((k) => k.toLowerCase() === normKey);
+      if (!actMatchingKey) return false;
+
+      const expVal = expectedRow[key];
+      const actVal = actualRow[actMatchingKey];
+
+      if (typeof expVal === 'number' && typeof actVal === 'number') {
+        if (Math.abs(expVal - actVal) > 0.01) return false;
+      } else if (String(expVal).trim().toLowerCase() !== String(actVal).trim().toLowerCase()) {
+        return false;
       }
     }
 

@@ -12,6 +12,9 @@ import { optionalAuth } from '../middlewares/auth';
 
 const router = Router();
 
+// GET /api/v1/sql/status - SQL engine readiness and active backend
+router.get('/status', sqlController.getStatus.bind(sqlController));
+
 // POST /api/v1/sql/execute - Execute SQL statement in sandbox
 router.post(
   '/execute',

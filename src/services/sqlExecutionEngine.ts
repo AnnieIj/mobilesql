@@ -2,6 +2,7 @@ import type { SQLExecutionResult, SQLDialect } from '../types';
 import { PRACTICE_DATABASES } from '../data/playgroundDatabases';
 import { apiClient } from './apiClient';
 import { logger } from '../server/utils/logger';
+import alasql from 'alasql';
 
 export interface ExecutionPlanNode {
   id: string;
@@ -13,6 +14,46 @@ export interface ExecutionPlanNode {
   rowsProcessed: number;
   filter?: string;
   children?: ExecutionPlanNode[];
+}
+
+const clientDatabases = new Map<string, any>();
+
+function getClientPracticeDatabase(databaseId: string = 'ecommerce_prod'): any {
+  if (clientDatabases.has(databaseId)) {
+    return clientDatabases.get(databaseId);
+  }
+
+  const dbInstance = new alasql.Database();
+  const dbConfig = PRACTICE_DATABASES.find((db) => db.id === databaseId) || PRACTICE_DATABASES[0];
+
+  if (dbConfig && dbConfig.tables && dbConfig.data) {
+    for (const table of dbConfig.tables) {
+      const colDefs = table.columns.map((c) => {
+        let sqlType = 'STRING';
+        const t = c.type.toUpperCase();
+        if (t.includes('INT') || t.includes('SERIAL') || t.includes('BIGINT')) sqlType = 'INT';
+        else if (t.includes('DECIMAL') || t.includes('NUMERIC') || t.includes('FLOAT')) sqlType = 'FLOAT';
+        else if (t.includes('BOOL')) sqlType = 'BOOLEAN';
+        return `${c.name} ${sqlType}`;
+      }).join(', ');
+
+      dbInstance.exec(`CREATE TABLE ${table.name} (${colDefs});`);
+
+      const rows = (dbConfig.data as Record<string, any[]>)[table.name] || [];
+      if (rows.length > 0) {
+        for (const row of rows) {
+          const keys = Object.keys(row);
+          const cols = keys.join(', ');
+          const placeholders = keys.map(() => '?').join(', ');
+          const values = keys.map((k) => row[k]);
+          dbInstance.exec(`INSERT INTO ${table.name} (${cols}) VALUES (${placeholders});`, values);
+        }
+      }
+    }
+  }
+
+  clientDatabases.set(databaseId, dbInstance);
+  return dbInstance;
 }
 
 export const executePlaygroundQuery = async (
@@ -39,11 +80,12 @@ export const executePlaygroundQuery = async (
     };
   }
 
-  // 1. Attempt real execution via PostgreSQL backend API
+  // 1. Attempt execution via backend API
   try {
     const backendResult = await apiClient.sql.execute({
       query: trimmed,
       dialect: dialect as any,
+      databaseId,
       timeoutMs: 8000,
       readOnly: false,
       limit: 1000,
@@ -67,8 +109,8 @@ export const executePlaygroundQuery = async (
         },
         plan: {
           id: 'plan_node_1',
-          type: 'Index Scan / Hash Aggregate',
-          relationName: 'postgresql_prod',
+          type: upperSql.includes('JOIN') ? 'Hash Join / Aggregate' : (upperSql.includes('WHERE') ? 'Index Scan' : 'Seq Scan'),
+          relationName: databaseId || 'dataset_table',
           costStart: 0.0,
           costEnd: 18.5,
           actualTimeMs: Math.max(0.1, execTime * 0.4),
@@ -94,68 +136,47 @@ export const executePlaygroundQuery = async (
   }
 
   // 2. Client-side Sandbox fallback for local practice datasets
-  const db = PRACTICE_DATABASES.find((d) => d.id === databaseId) || PRACTICE_DATABASES[0];
+  try {
+    const clientDb = getClientPracticeDatabase(databaseId);
+    const rawResult = clientDb.exec(trimmed);
+    const execTime = Math.max(1, Math.round(performance.now() - startTime));
+    const rows = Array.isArray(rawResult) ? rawResult : [];
+    const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
 
-  let matchedTableName = '';
-  for (const table of db.tables) {
-    if (upperSql.includes(table.name.toUpperCase())) {
-      matchedTableName = table.name;
-      break;
-    }
+    return {
+      result: {
+        query: trimmed,
+        columns,
+        rows,
+        rowCount: rows.length,
+        executionTimeMs: execTime,
+        executedAt: new Date().toISOString(),
+        dialect,
+      },
+      plan: {
+        id: 'plan_node_client',
+        type: upperSql.includes('JOIN') ? 'Hash Join' : (upperSql.includes('WHERE') ? 'Index Scan' : 'Seq Scan'),
+        relationName: databaseId || 'dataset_table',
+        costStart: 0.0,
+        costEnd: 24.8,
+        actualTimeMs: execTime * 0.5,
+        rowsProcessed: rows.length,
+      },
+    };
+  } catch (clientSqlErr: any) {
+    return {
+      result: {
+        query: trimmed,
+        columns: [],
+        rows: [],
+        rowCount: 0,
+        executionTimeMs: Math.round(performance.now() - startTime),
+        error: clientSqlErr?.message || 'Client SQL evaluation error',
+        executedAt: new Date().toISOString(),
+        dialect,
+      },
+    };
   }
-
-  if (!matchedTableName && db.tables.length > 0) {
-    matchedTableName = db.tables[0].name;
-  }
-
-  const rawRows = db.data[matchedTableName] || [];
-  let columns: string[] = [];
-  if (rawRows.length > 0) {
-    columns = Object.keys(rawRows[0]);
-  } else if (db.tables.find((t) => t.name === matchedTableName)) {
-    columns = db.tables.find((t) => t.name === matchedTableName)!.columns.map((c) => c.name);
-  } else {
-    columns = ['result'];
-  }
-
-  let rows = [...rawRows];
-  if (upperSql.includes('COUNT') || upperSql.includes('SUM') || upperSql.includes('AVG')) {
-    if (upperSql.includes('GROUP BY')) {
-      rows = rows.slice(0, 5);
-    } else {
-      columns = ['total_count', 'total_sum', 'avg_val'];
-      rows = [{ total_count: rawRows.length, total_sum: 45800.5, avg_val: 1250.25 }];
-    }
-  }
-
-  const limitMatch = trimmed.match(/LIMIT\s+(\d+)/i);
-  if (limitMatch && limitMatch[1]) {
-    const limitNum = parseInt(limitMatch[1], 10);
-    rows = rows.slice(0, limitNum);
-  }
-
-  const executionTimeMs = Math.max(1, Math.round(performance.now() - startTime));
-
-  return {
-    result: {
-      query: trimmed,
-      columns,
-      rows,
-      rowCount: rows.length,
-      executionTimeMs,
-      executedAt: new Date().toISOString(),
-      dialect,
-    },
-    plan: {
-      id: 'plan_node_client',
-      type: upperSql.includes('WHERE') ? 'Index Scan' : 'Seq Scan',
-      relationName: matchedTableName || 'dataset_table',
-      costStart: 0.0,
-      costEnd: 24.8,
-      actualTimeMs: executionTimeMs * 0.5,
-      rowsProcessed: rows.length,
-    },
-  };
 };
 
 export const formatSQLQuery = async (query: string, dialect: SQLDialect = 'PostgreSQL'): Promise<string> => {
